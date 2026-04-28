@@ -33,6 +33,39 @@ So I built a unified GUI that orchestrates a full pentest session end-to-end, de
 | **Ligolo, Responder, BloodHound** | Toggle buttons for pivot setup |
 | **Exam timer** | 23h45 countdown, persisted across restarts |
 | **Quick actions** | F2 = listener, F3 = HTTP server, F4 = Ligolo, F9 = proof screenshot |
+## Embedded vs external terminal — by design
+
+The toolkit ships with two terminal modes, each optimized for a different
+job. Use the right one for the right task.
+
+### Embedded terminal (Ctrl+T)
+
+A lightweight PTY rendered inside the main window. Use it for:
+
+- Quick one-shots: `ifconfig`, `whoami`, `cat /etc/passwd`
+- Streaming scanners: `nmap`, `ffuf`, `gobuster`
+- Anything you want auto-dumped to disk and pushed to your notes
+
+It's intentionally simple — no curses, no fancy prompt, no env injection.
+The output flows into the buffer and into your Markdown notes.
+
+### External terminal (Ctrl+Shift+T)
+
+Spawns Windows Terminal (or your native Kali emulator) with the full
+toolkit session env loaded:
+
+- `$LHOST`, `$LPORT`, `$TARGET`, `$DOMAIN`, `$USER`, `$PASS`, `$HASH`
+- `$BIN_LIN`, `$BIN_WIN`, `$WORDLISTS`, `$SCRIPTS`
+- Aliases: `serve`, `servewin`, `servelin`, `listener`, `cdpen`, `cdtk`
+
+Use it for:
+
+- Interactive sessions: `msfconsole`, `evil-winrm`, `responder`
+- Anything ncurses / TUI: `vim`, `tmux`, `htop`, `wireshark`
+- Long pivots where you want full bash history & coloration
+
+The two complement each other. The embedded one is for organized output;
+the external one is for real interaction.
 
 ## Stack
 
