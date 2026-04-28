@@ -4,7 +4,6 @@
 
 Built during 6 months of HTB/PG labs to solve one specific frustration: the constant context-switching between 12+ terminal windows, scattered notes, repeated IP retyping, and forgotten screenshots before machine reverts.
 
-> 🇫🇷 **French note** — UI strings are in French. Contributions for an English translation are welcome.
 
 ---
 
@@ -51,19 +50,16 @@ So I built a unified GUI that orchestrates a full pentest session end-to-end, de
 
 ## Screenshots
 
-> 📸 Drop your own screenshots here once you fork the repo. The default theme is dark; the toolbar is on the left in a 3-color scheme (red for kill actions, green for spawn, blue for navigation).
 
-```
-  +---------------------------------------------------+
-  | [tool] [term] [revsh] [F2] [F3] [F4]   timer 23:45|
-  +-----+---------------------------------------+-----+
-  |Scope|         Terminal tabs (multi)         |Notes|
-  |     |                                       |     |
-  |Tools|                                       |Vault|
-  +-----+---------------------------------------+-----+
-  | status: kali@kali  10.10.14.5  3 tabs live        |
-  +---------------------------------------------------+
-```
+
+<img width="1905" height="997" alt="image" src="https://github.com/user-attachments/assets/a098e808-a055-4ed3-bfec-70cabe77e7cd" />
+<img width="623" height="399" alt="image" src="https://github.com/user-attachments/assets/a29acbe2-a133-4087-9543-09a890e27767" />
+<img width="1903" height="997" alt="image" src="https://github.com/user-attachments/assets/8d1921dc-98a9-431e-9b58-9a11e5b3200e" />
+<img width="1907" height="999" alt="image" src="https://github.com/user-attachments/assets/211912a0-76dc-4d1e-af36-8ba46b34e218" />
+<img width="306" height="171" alt="image" src="https://github.com/user-attachments/assets/1789f36a-2ec9-4317-b492-f865179615e2" />
+<img width="454" height="303" alt="image" src="https://github.com/user-attachments/assets/ae81f811-9b11-4649-8cba-54bad445aa00" />
+
+
 
 ## Installation
 
@@ -131,7 +127,6 @@ toolkit/
 ## Contributing
 
 PRs welcome, especially for:
-- English translation of the UI strings
 - New tool templates in `config/defaults/tools.default.json`
 - Cheatsheets in `cheatsheets/`
 - Bug reports with reproduction steps
