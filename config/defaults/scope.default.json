@@ -1,0 +1,12 @@
+{
+  "subnets": [
+    {
+      "cidr": "10.10.10.0/24",
+      "label": "external",
+      "pivot_via": null,
+      "machines": []
+    }
+  ],
+  "machines": [],
+  "pivots": []
+}

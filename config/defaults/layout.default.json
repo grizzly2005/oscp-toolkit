@@ -1,0 +1,54 @@
+{
+  "window": {
+    "width": 1600,
+    "height": 900,
+    "maximized": true,
+    "x": 100,
+    "y": 100
+  },
+  "splitters": {
+    "main_horizontal": [280, 900, 340],
+    "center_vertical": [500, 300],
+    "right_vertical": [500, 300],
+    "left_vertical": [400, 300]
+  },
+  "panels": {
+    "tools_sidebar_visible": true,
+    "right_sidebar_visible": true,
+    "notes_visible": true,
+    "docs_visible": true,
+    "clipboard_visible": true,
+    "vault_visible": true,
+    "scope_visible": true,
+    "target_board_visible": false,
+    "services_visible": true,
+    "status_bar_visible": true
+  },
+  "theme": {
+    "mode": "dark",
+    "font_family": "Monospace",
+    "font_size": 10,
+    "terminal_font_size": 11
+  },
+  "terminals": {
+    "buffer_max_lines": 50000,
+    "buffer_dump_on_overflow": true,
+    "watchdog_timeout_seconds": 10,
+    "lazy_render_when_hidden": true,
+    "colors_by_category": {
+      "exploit": "#d32f2f",
+      "enum": "#1976d2",
+      "ad": "#7b1fa2",
+      "privesc": "#388e3c",
+      "cracking": "#f57c00",
+      "network": "#00838f",
+      "default": "#424242"
+    }
+  },
+  "performance": {
+    "lightweight_mode": false,
+    "disable_minimap": false,
+    "disable_md_preview": false,
+    "disable_animations": false
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "vars": {
+    "LHOST": "",
+    "LPORT": "4444",
+    "TARGET": "",
+    "DOMAIN": "",
+    "USER": "",
+    "PASS": "",
+    "HASH": "",
+    "IFACE": "tun0"
+  }
+}

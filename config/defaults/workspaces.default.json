@@ -1,0 +1,14 @@
+{
+  "workspaces": [
+    {
+      "name": "Default",
+      "tools_filter": [],
+      "notes_folder": "data/notes/default/",
+      "targets": [],
+      "scope": "scope.json",
+      "credentials": "credentials.json",
+      "layout": "layout.json"
+    }
+  ],
+  "active": "Default"
+}

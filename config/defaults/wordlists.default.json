@@ -1,0 +1,45 @@
+{
+  "wordlists": [
+    {
+      "name": "rockyou.txt",
+      "path": "/usr/share/wordlists/rockyou.txt",
+      "category": "passwords",
+      "description": "Le grand classique (compressé en .gz par défaut sur Kali)",
+      "size_bytes": 0,
+      "lines": 0
+    },
+    {
+      "name": "common.txt (dirb)",
+      "path": "/usr/share/wordlists/dirb/common.txt",
+      "category": "web-directories",
+      "description": "Liste de répertoires web communs",
+      "size_bytes": 0,
+      "lines": 0
+    },
+    {
+      "name": "directory-list-2.3-medium",
+      "path": "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt",
+      "category": "web-directories",
+      "description": "Dirbuster medium",
+      "size_bytes": 0,
+      "lines": 0
+    },
+    {
+      "name": "SecLists Top 1000 Passwords",
+      "path": "/usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt",
+      "category": "passwords",
+      "description": "Top 1000 mots de passe SecLists",
+      "size_bytes": 0,
+      "lines": 0
+    },
+    {
+      "name": "names.txt",
+      "path": "/usr/share/seclists/Usernames/Names/names.txt",
+      "category": "usernames",
+      "description": "Liste de prénoms",
+      "size_bytes": 0,
+      "lines": 0
+    }
+  ],
+  "custom": []
+}

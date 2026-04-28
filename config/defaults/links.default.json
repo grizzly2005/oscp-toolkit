@@ -1,0 +1,20 @@
+{
+  "links": [
+    {"name": "HackTricks", "url": "https://book.hacktricks.xyz", "category": "Multi"},
+    {"name": "HackTricks Windows", "url": "https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation", "category": "PrivEsc Windows"},
+    {"name": "HackTricks Linux", "url": "https://book.hacktricks.xyz/linux-hardening/privilege-escalation", "category": "PrivEsc Linux"},
+    {"name": "GTFOBins", "url": "https://gtfobins.github.io", "category": "PrivEsc Linux"},
+    {"name": "LOLBAS", "url": "https://lolbas-project.github.io", "category": "PrivEsc Windows"},
+    {"name": "PayloadsAllTheThings", "url": "https://github.com/swisskyrepo/PayloadsAllTheThings", "category": "Multi"},
+    {"name": "RevShells", "url": "https://www.revshells.com", "category": "Exploitation"},
+    {"name": "Wadcoms", "url": "https://wadcoms.github.io", "category": "AD"},
+    {"name": "OSCP Like Machines", "url": "https://docs.google.com/spreadsheets/d/1dwSMIAPIam0PuRBkCiDI88pU3yzrqqHkDtBngUHNCw8/htmlview", "category": "Training"},
+    {"name": "TJnull OSCP List", "url": "https://docs.google.com/spreadsheets/d/1dwSMIAPIam0PuRBkCiDI88pU3yzrqqHkDtBngUHNCw8", "category": "Training"},
+    {"name": "Active Directory Exploitation Cheat Sheet", "url": "https://github.com/S1ckB0y1337/Active-Directory-Exploitation-Cheat-Sheet", "category": "AD"},
+    {"name": "CheatSheetSeries (OWASP)", "url": "https://cheatsheetseries.owasp.org", "category": "Web"},
+    {"name": "HackingArticles", "url": "https://www.hackingarticles.in", "category": "Multi"},
+    {"name": "SecLists", "url": "https://github.com/danielmiessler/SecLists", "category": "Wordlists"},
+    {"name": "OffSec Exam Guide", "url": "https://help.offsec.com/hc/en-us/articles/360046787731-OSCP-Exam-Guide", "category": "OSCP"},
+    {"name": "OSCP Proof Requirements", "url": "https://help.offsec.com/hc/en-us/articles/360040165632-OSCP-Exam-FAQ", "category": "OSCP"}
+  ]
+}

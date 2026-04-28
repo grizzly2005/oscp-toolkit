@@ -1,0 +1,18 @@
+{
+  "shortcuts": {
+    "new_terminal": "Ctrl+T",
+    "new_note": "Ctrl+N",
+    "global_search": "Ctrl+F",
+    "close_tab": "Ctrl+W",
+    "terminal_copy": "Ctrl+Shift+C",
+    "terminal_paste": "Ctrl+Shift+V",
+    "clipboard_manager": "Ctrl+K",
+    "focus_filter": "Ctrl+L",
+    "encoder": "Ctrl+E",
+    "revshell": "Ctrl+R",
+    "command_history": "Ctrl+H",
+    "documentation": "F1",
+    "save_session": "Ctrl+S",
+    "toggle_sidebar": "Ctrl+B"
+  }
+}
