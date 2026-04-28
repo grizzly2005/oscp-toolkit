@@ -176,9 +176,7 @@ Style: keep `core/` Qt-free. Panels in `ui/` consume `core` via signals only.
 
 MIT. Use at your own risk on systems you have authorization to test.
 
-## Acknowledgments
 
-Inspired by the pain of grinding 30+ HTB/PG boxes solo. Shoutouts to the OSCP community on Discord and the offsec subreddit for feedback during the build.
 
 ---
 
