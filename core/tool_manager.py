@@ -28,6 +28,7 @@ Un outil :
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import time
@@ -75,6 +76,7 @@ class Tool:
     templates: List[str] = field(default_factory=list)
     doc_link: str = ""
     favorite: bool = False
+    transfer_asset: bool = False
     history: List[Dict] = field(default_factory=list)
     present: Optional[bool] = None  # rempli par check_integrity
 
@@ -122,6 +124,7 @@ class ToolManager(QObject):
 
     def _load(self) -> None:
         data = self._cm.load("tools")
+        defaults = self._load_default_tool_entries()
         self._tools = {}
         for item in data.get("tools", []):
             try:
@@ -129,8 +132,41 @@ class ToolManager(QObject):
             except TypeError as exc:
                 log.warning("Skip bad tool entry %s: %s", item, exc)
                 continue
+            default_item = defaults.get(t.name, {})
+            if default_item.get("transfer_asset") and not t.transfer_asset:
+                t.transfer_asset = True
+            if not t.transfer_asset and "(transfer)" in t.description.lower():
+                t.transfer_asset = True
+            if t.name == "nmap":
+                t.templates = self._merge_templates(
+                    t.templates,
+                    default_item.get("templates", []),
+                )
             self._tools[t.name] = t
         log.info("Loaded %d tools", len(self._tools))
+
+    def _load_default_tool_entries(self) -> Dict[str, Dict]:
+        path = self._cm.defaults_dir / "tools.default.json"
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return {}
+        return {
+            item.get("name", ""): item
+            for item in data.get("tools", [])
+            if isinstance(item, dict) and item.get("name")
+        }
+
+    @staticmethod
+    def _merge_templates(current: List[str], defaults: List[str]) -> List[str]:
+        merged = list(current)
+        seen = set(current)
+        for template in defaults:
+            if template not in seen:
+                merged.append(template)
+                seen.add(template)
+        return merged
 
     def _save(self) -> None:
         self._cm.save(

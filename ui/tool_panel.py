@@ -21,7 +21,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QIcon
 from PyQt5.QtWidgets import (
     QAction, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-    QLineEdit, QMenu, QMessageBox, QPushButton, QPlainTextEdit,
+    QCheckBox, QLineEdit, QMenu, QMessageBox, QPushButton, QPlainTextEdit,
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -52,6 +52,8 @@ class ToolEditDialog(QDialog):
         self._path = QLineEdit(tool.path if tool else "")
         self._description = QLineEdit(tool.description if tool else "")
         self._doc = QLineEdit(tool.doc_link if tool else "")
+        self._transfer_asset = QCheckBox("Ajouter au File Server au clic")
+        self._transfer_asset.setChecked(bool(tool.transfer_asset) if tool else False)
         self._templates = QPlainTextEdit(
             "\n".join(tool.templates) if tool else ""
         )
@@ -66,6 +68,7 @@ class ToolEditDialog(QDialog):
         layout.addRow("Chemin binaire", self._path)
         layout.addRow("Description", self._description)
         layout.addRow("Doc (chemin .md)", self._doc)
+        layout.addRow("Type transfert", self._transfer_asset)
         layout.addRow("Templates", self._templates)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -88,6 +91,7 @@ class ToolEditDialog(QDialog):
             doc_link=self._doc.text().strip(),
             templates=templates,
             favorite=self._tool.favorite if self._tool else False,
+            transfer_asset=self._transfer_asset.isChecked(),
             history=self._tool.history if self._tool else [],
             # Préserver les champs non-éditables dans le dialog
             os_target=self._tool.os_target if self._tool else "multi",
@@ -181,6 +185,8 @@ class ToolPanel(QWidget):
 
     def _make_item(self, tool: Tool) -> QTreeWidgetItem:
         label = tool.name
+        if tool.transfer_asset:
+            label = "[TX]" + label
         if tool.present is True:
             label = "[OK]" + label
         elif tool.present is False:
@@ -190,6 +196,8 @@ class ToolPanel(QWidget):
         item = QTreeWidgetItem([label])
         item.setData(0, Qt.UserRole, tool.name)
         tooltip = tool.description or tool.name
+        if tool.transfer_asset:
+            tooltip += "\nClic: ajouter le fichier au File Server"
         if tool.templates:
             tooltip += f"\n{len(tool.templates)} template(s)"
         if tool.path:
@@ -236,7 +244,12 @@ class ToolPanel(QWidget):
             return
         menu = QMenu(self)
 
-        if tool.templates:
+        if tool.transfer_asset:
+            transfer_act = QAction("Ajouter au File Server", self)
+            transfer_act.triggered.connect(lambda: self.launch_requested.emit(tool, -1))
+            menu.addAction(transfer_act)
+
+        if tool.templates and not tool.transfer_asset:
             sub = menu.addMenu("Lancer template...")
             for i, tpl in enumerate(tool.templates):
                 act = QAction(tpl[:80] + ("..." if len(tpl) > 80 else ""), self)
