@@ -13,7 +13,12 @@
       "dependencies": [],
       "templates": [
         "nmap -sC -sV -oN nmap_tcp_{{IP}} {{IP}}",
-        "nmap -p- --min-rate=1000 -oN nmap_full_{{IP}} {{IP}}",
+        "nmap -A {{IP}} -oN nmap_advanced_{{IP}}.txt {{IP}}",
+        "sudo nmap -p- -sS -sU --min-rate 1000 --max-retries 1 -T4 -oN nmap_fast_tcp_udp_{{IP}}.txt {{IP}}",
+        "nmap -p- -T4 -n -Pn -oN nmap_fast_ports_{{IP}}.txt {{IP}}",
+        "sudo nmap --min-rate 5000 -p- -vvv -Pn -n -oG openPorts_{{IP}}.txt {{IP}}",
+        "nmap -p- -oN nmap_all_ports_{{IP}}.txt {{IP}}",
+        "nmap --top-ports {{TOP_PORTS}} -oN nmap_top_{{TOP_PORTS}}_{{IP}}.txt {{IP}}",
         "nmap -sU --top-ports 100 -oN nmap_udp_{{IP}} {{IP}}",
         "nmap -sC -sV -p {{PORTS}} -oN nmap_targeted_{{IP}} {{IP}}",
         "nmap --script=smb-vuln* -p 445 {{IP}}",
@@ -155,7 +160,8 @@
       ],
       "doc_link": "",
       "favorite": false,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "john",
@@ -324,7 +330,8 @@
       ],
       "doc_link": "",
       "favorite": false,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "impacket-secretsdump",
@@ -539,7 +546,8 @@
       ],
       "doc_link": "cheatsheets/active_directory.md",
       "favorite": true,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "sharphound",
@@ -558,7 +566,8 @@
       ],
       "doc_link": "cheatsheets/active_directory.md",
       "favorite": true,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "mimikatz",
@@ -581,7 +590,8 @@
       ],
       "doc_link": "cheatsheets/active_directory.md",
       "favorite": true,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "certify",
@@ -602,7 +612,8 @@
       ],
       "doc_link": "cheatsheets/active_directory.md",
       "favorite": false,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "linpeas",
@@ -622,7 +633,8 @@
       ],
       "doc_link": "cheatsheets/privesc_linux.md",
       "favorite": true,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "pspy",
@@ -641,7 +653,8 @@
       ],
       "doc_link": "",
       "favorite": false,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "winpeas",
@@ -661,7 +674,8 @@
       ],
       "doc_link": "cheatsheets/privesc_windows.md",
       "favorite": true,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "godpotato",
@@ -682,7 +696,8 @@
       ],
       "doc_link": "cheatsheets/privesc_windows.md",
       "favorite": true,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "printspoofer",
@@ -702,7 +717,8 @@
       ],
       "doc_link": "cheatsheets/privesc_windows.md",
       "favorite": false,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "juicypotato",
@@ -722,7 +738,8 @@
       ],
       "doc_link": "cheatsheets/privesc_windows.md",
       "favorite": false,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "powerview",
@@ -747,7 +764,8 @@
       ],
       "doc_link": "cheatsheets/active_directory.md",
       "favorite": true,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "powerup",
@@ -766,7 +784,8 @@
       ],
       "doc_link": "cheatsheets/privesc_windows.md",
       "favorite": false,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "invoke-mimikatz",
@@ -786,7 +805,8 @@
       ],
       "doc_link": "",
       "favorite": false,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     },
     {
       "name": "ligolo-ng",
@@ -887,7 +907,8 @@
       ],
       "doc_link": "",
       "favorite": false,
-      "history": []
+      "history": [],
+      "transfer_asset": true
     }
   ]
 }

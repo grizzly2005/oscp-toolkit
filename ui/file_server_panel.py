@@ -15,7 +15,6 @@ de l'utilisateur, il sait ce qu'il fait).
 from __future__ import annotations
 
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -27,14 +26,14 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from core.file_server import FileServerManager
+from core.file_server import DEFAULT_SERVING_DIR, FileServerManager
 from core.logger import get_logger
 from .widgets import SafeButton
 
 log = get_logger(__name__)
 
 
-SERVING_DIR = Path(tempfile.gettempdir()) / "oscp_serving"
+SERVING_DIR = DEFAULT_SERVING_DIR
 
 
 def _sizeof_fmt(num: int) -> str:
@@ -178,6 +177,27 @@ class FileServerPanel(QWidget):
         self._pulse_timer.timeout.connect(self._pulse_status)
         self._pulse_timer.start()
 
+    # -- Public API ---------------------------------------------------------
+
+    def add_transfer_file(self, src_path: str, *, start_server: bool = True) -> bool:
+        """Add a local tool/binary to the served transfer directory."""
+        if not self._add_file(src_path):
+            return False
+        self._sync_current_share()
+        if start_server and self._current_share is None:
+            self._start_server()
+        self._refresh_table()
+        self._select_file(Path(src_path).name)
+        self._sync_snippet_buttons()
+        self._flash_status(f"Ajoute au transfert : {Path(src_path).name}", "#81c784")
+        return True
+
+    def current_base_url(self) -> str:
+        self._sync_current_share()
+        ip = self._get_ip() or "LHOST"
+        port = self._current_share.port if self._current_share else self._port_spin.value()
+        return f"http://{ip}:{port}/"
+
     # -- Drag & drop ---------------------------------------------------------
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
@@ -317,6 +337,7 @@ class FileServerPanel(QWidget):
             self._refresh_table()
 
     def _refresh_status(self) -> None:
+        self._sync_current_share()
         if self._current_share:
             ip = self._get_ip() or "LHOST"
             self._status_lbl.setText(
@@ -330,9 +351,19 @@ class FileServerPanel(QWidget):
         self._reset_drop_style()
         self._pulse_status()
 
+    def _sync_current_share(self) -> None:
+        share = self._fs.active_http(str(SERVING_DIR))
+        if share is not self._current_share:
+            self._current_share = share
+            self._btn_start.setText("Arreter" if share else "Demarrer")
+            self._btn_start.setObjectName("fsStop" if share else "fsStart")
+            self._btn_start.style().unpolish(self._btn_start)
+            self._btn_start.style().polish(self._btn_start)
+
     # -- Table ---------------------------------------------------------------
 
     def _refresh_table(self) -> None:
+        self._sync_current_share()
         files = sorted([p for p in SERVING_DIR.glob("*") if p.is_file()])
         self._table.setRowCount(len(files))
         ip = self._get_ip() or "LHOST"
@@ -345,6 +376,14 @@ class FileServerPanel(QWidget):
             url = f"http://{ip}:{port}/{p.name}"
             url_item = QTableWidgetItem(url)
             self._table.setItem(row, 2, url_item)
+        self._sync_snippet_buttons()
+
+    def _select_file(self, filename: str) -> None:
+        for row in range(self._table.rowCount()):
+            item = self._table.item(row, 0)
+            if item and item.text() == filename:
+                self._table.selectRow(row)
+                return
 
     def _on_copy_url(self, row: int, _col: int) -> None:
         url_item = self._table.item(row, 2)

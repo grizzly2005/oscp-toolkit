@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 from typing import List, Optional
 
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
@@ -13,7 +14,7 @@ from PyQt5.QtWidgets import (
 )
 
 from core.transfer_helper import TransferPair, generate
-from core.file_server import FileServerManager
+from core.file_server import DEFAULT_SERVING_DIR, FileServerManager
 
 
 _METHOD_COLORS = {
@@ -325,18 +326,34 @@ class TransferDialog(QDialog):
         if self._fs is None:
             return
         file_path = self._file_edit.text().strip()
-        if not file_path:
-            self._set_summary("Choisis un fichier", "#ef5350", reset=True)
-            return
-        directory = str(Path(file_path).parent)
+        DEFAULT_SERVING_DIR.mkdir(parents=True, exist_ok=True)
+        directory = str(DEFAULT_SERVING_DIR)
+        if file_path:
+            src = Path(file_path)
+            if not src.is_file():
+                self._set_summary("Fichier introuvable", "#ef5350", reset=True)
+                return
+            staged = DEFAULT_SERVING_DIR / src.name
+            try:
+                if src.resolve() != staged.resolve():
+                    shutil.copy2(src, staged)
+                self._file_edit.setText(str(staged))
+            except OSError as exc:
+                from ui.dialogs import error_box
+                error_box(self, "Erreur transfert", f"Copie impossible : {exc}")
+                self._set_summary("Copie KO", "#ef5350", reset=True)
+                return
         port = self._port.value()
         try:
             share = self._fs.start_http(directory=directory, port=port)
             self._port.setValue(share.port)
             url = f"http://{self._ip_edit.text().strip()}:{share.port}/"
             QApplication.clipboard().setText(url)
-            self._set_summary(f"HTTP actif :{share.port}", "#81c784")
-            self._on_generate()
+            if file_path:
+                self._set_summary(f"Fichier servi :{share.port}", "#81c784")
+                self._on_generate()
+            else:
+                self._set_summary(f"HTTP actif :{share.port}", "#81c784")
         except Exception as exc:
             from ui.dialogs import error_box
             error_box(self, "Erreur file server", str(exc))

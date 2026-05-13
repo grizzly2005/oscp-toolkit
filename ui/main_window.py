@@ -861,6 +861,10 @@ class MainWindow(QMainWindow):
 
     def _on_launch_tool(self, tool: Tool, template_index: int) -> None:
         """Lancer un outil : résoudre placeholders -> spawn terminal."""
+        if tool.transfer_asset:
+            self._add_tool_to_file_server(tool)
+            return
+
         # Choix du template
         if not tool.templates:
             # Pas de template : juste le path
@@ -941,6 +945,46 @@ class MainWindow(QMainWindow):
         )
         self._tools.record_usage(tool.name, final_cmd)
         self._history.record(command=final_cmd, tool=tool.name, terminal=tool.name)
+
+    def _add_tool_to_file_server(self, tool: Tool) -> None:
+        """Stage a local binary/script in the File Server transfer list."""
+        path = self._resolve_tool_asset_path(tool.path)
+        if path is None:
+            error_box(
+                self,
+                "Fichier introuvable",
+                f"Impossible de trouver le fichier local pour '{tool.name}'.\n\n"
+                f"Chemin configure : {tool.path or '(vide)'}",
+            )
+            return
+
+        self._dock_fs.show()
+        self._dock_fs.raise_()
+        ok = self._file_server_panel.add_transfer_file(str(path), start_server=True)
+        if not ok:
+            return
+        url = self._file_server_panel.current_base_url() + path.name
+        self._tools.record_usage(tool.name, f"transfer:{path}")
+        self._history.record(command=f"# transfer {tool.name}: {url}", tool=tool.name, terminal="file-server")
+        self.statusBar().showMessage(
+            f"{tool.name} ajoute au File Server : {url}",
+            5000,
+        )
+
+    def _resolve_tool_asset_path(self, raw_path: str) -> Optional[Path]:
+        if not raw_path:
+            return None
+        expanded = self._env.expand_value(raw_path)
+        candidates = [expanded]
+        if expanded.startswith("/mnt/") and len(expanded) > 6:
+            drive = expanded[5]
+            rest = expanded[7:].replace("/", "\\")
+            candidates.append(f"{drive.upper()}:\\{rest}")
+        for candidate in candidates:
+            p = Path(candidate)
+            if p.is_file():
+                return p
+        return None
 
     def _build_scope_suggestions(self) -> Dict[str, List[Tuple[str, str]]]:
         """Construit les listes de suggestions a partir du scope.

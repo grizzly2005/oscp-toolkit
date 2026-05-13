@@ -11,12 +11,11 @@ complète des commandes cible/attaquant, voir transfer_helper.py.
 
 from __future__ import annotations
 
-import os
 import shutil
-import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -30,6 +29,8 @@ from .logger import get_logger
 from .process_tracker import ProcessTracker, pid_exists
 
 log = get_logger(__name__)
+
+DEFAULT_SERVING_DIR = Path(tempfile.gettempdir()) / "oscp_serving"
 
 
 def _free_port(preferred: int) -> int:
@@ -79,6 +80,7 @@ class FileServerManager(QObject):
         super().__init__(parent)
         self._pt = process_tracker
         self._shares: Dict[str, FileShare] = {}
+        self._procs: Dict[str, subprocess.Popen] = {}
         self._monitor_stop = threading.Event()
         self._monitor = threading.Thread(
             target=self._monitor_loop, daemon=True, name="file-server-monitor"
@@ -90,10 +92,29 @@ class FileServerManager(QObject):
     def all(self) -> List[FileShare]:
         return list(self._shares.values())
 
+    def active_http(self, directory: Optional[str] = None) -> Optional[FileShare]:
+        """Return an active HTTP share, optionally scoped to one directory."""
+        wanted = str(Path(directory).resolve()) if directory else None
+        for sid, share in list(self._shares.items()):
+            if share.kind != "http":
+                continue
+            if not pid_exists(share.pid):
+                self._shares.pop(sid, None)
+                self._procs.pop(sid, None)
+                self._pt.unregister(share.pid)
+                continue
+            if wanted and str(Path(share.directory).resolve()) != wanted:
+                continue
+            return share
+        return None
+
     def start_http(self, directory: str, port: int = 8000) -> FileShare:
         d = Path(directory)
         if not d.is_dir():
             raise ValueError(f"Not a directory: {directory}")
+        existing = self.active_http(str(d))
+        if existing is not None:
+            return existing
         actual_port = _free_port(port)
         cmd = [sys.executable, "-m", "http.server", str(actual_port)]
         proc = subprocess.Popen(
@@ -101,7 +122,7 @@ class FileServerManager(QObject):
             cwd=str(d),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+            start_new_session=True,
         )
         if proc.poll() is not None:
             raise RuntimeError(
@@ -113,6 +134,7 @@ class FileServerManager(QObject):
             port=actual_port, pid=proc.pid,
         )
         self._shares[sid] = share
+        self._procs[sid] = proc
         self._pt.register(
             pid=proc.pid, name=f"http:{actual_port}",
             category="file_server", command=" ".join(cmd),
@@ -143,7 +165,7 @@ class FileServerManager(QObject):
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+            start_new_session=True,
         )
         sid = f"smb_{uuid.uuid4().hex[:8]}"
         share = FileShare(
@@ -151,6 +173,7 @@ class FileServerManager(QObject):
             port=port, pid=proc.pid, share_name=share_name,
         )
         self._shares[sid] = share
+        self._procs[sid] = proc
         self._pt.register(
             pid=proc.pid, name=f"smb:{share_name}",
             category="file_server", command=" ".join(cmd),
@@ -166,12 +189,34 @@ class FileServerManager(QObject):
         share = self._shares.get(share_id)
         if share is None:
             return False
-        killed = self._pt.kill(share.pid)
+        proc = self._procs.pop(share_id, None)
+        killed = self._stop_process(proc) if proc is not None else False
+        if not killed:
+            killed = self._pt.kill(share.pid)
+        else:
+            self._pt.unregister(share.pid)
         self._shares.pop(share_id, None)
         self.share_stopped.emit(share_id)
         self.shares_changed.emit()
         log.info("Share %s stopped (killed=%s)", share_id, killed)
         return killed
+
+    def _stop_process(self, proc: subprocess.Popen) -> bool:
+        if proc.poll() is not None:
+            return True
+        try:
+            proc.terminate()
+            proc.wait(timeout=1.5)
+            return True
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+                proc.wait(timeout=1.5)
+                return True
+            except (OSError, subprocess.TimeoutExpired):
+                return False
+        except OSError:
+            return False
 
     def stop_all(self) -> None:
         for sid in list(self._shares.keys()):
@@ -194,6 +239,7 @@ class FileServerManager(QObject):
                 log.info("File server %s died externally, cleaning up", sid)
                 share = self._shares.pop(sid, None)
                 if share:
+                    self._procs.pop(sid, None)
                     self._pt.unregister(share.pid)
                 self.share_stopped.emit(sid)
                 self.shares_changed.emit()
