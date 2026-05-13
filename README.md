@@ -24,15 +24,45 @@ So I built a unified GUI that orchestrates a full pentest session end-to-end, de
 | Feature | What it gives you |
 |---|---|
 | **Scope manager** | Targets + subnets in one view, drag&drop between `todo` / `in-progress` / `rooted` |
-| **Tool launcher** | 80+ pre-configured tools with templates (`{{IP}}`, `{{LHOST}}`, `{{TARGET}}` auto-injected from scope) |
+| **Tool launcher** | Pre-configured tools with templates (`{{IP}}`, `{{LHOST}}`, `{{TARGET}}` auto-injected from scope) and a searchable command picker |
 | **Embedded terminals** | Multi-tab with auto-dump, searchable history, hung-process detection |
 | **Credential vault** | Discovered creds & hashes, reusable in tools with one click |
 | **Reverse shell generator** | 20+ payload variants, base64/URL/PS encoding, paired listener + msfvenom |
-| **Markdown notes** | Auto-injects launched commands with timestamps, full-text search |
-| **HTTP / SMB file server** | One-click expose of a payload from `data/serving/` |
+| **Exam workspace** | Auto-creates an `oscp-exam/` folder with scans, loot, notes, screenshots, tools, exploits and web folders |
+| **Markdown notes** | Auto-injects launched commands with timestamps, full-text search, saved into the exam workspace |
+| **HTTP / SMB file server** | One-click expose of tools/payloads from the exam workspace `tools/` folder |
+| **Transfer assets** | Tools like `linpeas`, `winpeas`, `Seatbelt`, `PowerView`, etc. stage directly into File Server instead of opening useless terminals |
+| **Cheatsheets** | Markdown cheatsheets rendered inside the app with search and code-friendly dark styling |
 | **Ligolo, Responder, BloodHound** | Toggle buttons for pivot setup |
 | **Exam timer** | 23h45 countdown, persisted across restarts |
 | **Quick actions** | F2 = listener, F3 = HTTP server, F4 = Ligolo, F9 = proof screenshot |
+
+## Exam workspace
+
+By default the toolkit creates and uses:
+
+```text
+Desktop/oscp-exam/
+├── scans/
+│   ├── nmap/
+│   ├── udp/
+│   └── services/
+├── loot/
+│   ├── creds.txt
+│   ├── hashes.txt
+│   ├── users.txt
+│   └── interesting_files/
+├── exploits/
+├── screenshots/
+├── notes/
+├── tools/
+└── web/
+```
+
+You can change it from **Fichier > Dossier examen...**.
+
+New notes, proof screenshots, transfer assets, and Nmap output templates are routed into this workspace. External terminals also receive helpful env vars such as `$OSCP_EXAM`, `$OSCP_NMAP`, `$OSCP_UDP`, `$OSCP_SERVICES`, `$OSCP_LOOT`, `$OSCP_TOOLS`, and `$OSCP_WEB`.
+
 ## Embedded vs external terminal — by design
 
 The toolkit ships with two terminal modes, each optimized for a different
@@ -56,6 +86,7 @@ toolkit session env loaded:
 
 - `$LHOST`, `$LPORT`, `$TARGET`, `$DOMAIN`, `$USER`, `$PASS`, `$HASH`
 - `$BIN_LIN`, `$BIN_WIN`, `$WORDLISTS`, `$SCRIPTS`
+- `$OSCP_EXAM`, `$OSCP_NMAP`, `$OSCP_UDP`, `$OSCP_SERVICES`, `$OSCP_LOOT`, `$OSCP_TOOLS`, `$OSCP_WEB`
 - Aliases: `serve`, `servewin`, `servelin`, `listener`, `cdpen`, `cdtk`
 
 Use it for:
@@ -99,7 +130,7 @@ the external one is for real interaction.
 ```bash
 # Kali / Ubuntu
 sudo apt install python3-pip python3-pyqt5
-git clone https://github.com/<you>/oscp-toolkit.git
+git clone https://github.com/grizzly2005/oscp-toolkit.git
 cd oscp-toolkit
 pip install -r requirements.txt --break-system-packages
 
@@ -152,7 +183,7 @@ toolkit/
 │   ├── tool_panel.py
 │   └── ...
 ├── config/          # JSON configs + defaults/
-├── data/            # User data (notes, screenshots, sessions)
+├── data/            # Runtime/user data for the app itself
 ├── cheatsheets/     # Markdown crib sheets bundled in the app
 └── tests/unit/      # Pytest suite
 ```
@@ -181,3 +212,19 @@ MIT. Use at your own risk on systems you have authorization to test.
 ---
 
 **Disclaimer**: this tool is for authorized security testing only (CTFs, labs, your own infrastructure, paid engagements). The author assumes no liability for misuse. Don't be that person.
+
+## Simple changelog
+
+### 2026-05-13
+
+- Added configurable `oscp-exam/` workspace structure.
+- Routed notes, screenshots, transfer files, and Nmap outputs into the workspace.
+- Expanded Nmap command profiles.
+- Added transfer-asset workflow for local tools like `linpeas`, `winpeas`, `Seatbelt`, `PowerView`, and similar payloads.
+- Improved File Server startup/reuse and Windows process handling.
+- Improved Transfer Helper visuals and copy/start feedback.
+- Improved cheatsheet rendering and search.
+- Fixed reset/session cleanup around IPs, scope and env values.
+- Fixed stylesheet warnings on Transfer/File Server labels.
+- Disabled Qt dock/menu animations for faster close buttons.
+- Added more unit and smoke test coverage.
