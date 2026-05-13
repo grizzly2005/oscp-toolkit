@@ -115,6 +115,13 @@ class EnvManager(QObject):
             self._save()
             self.changed.emit()
 
+    def reset_to_defaults(self) -> None:
+        data = self._cm.reset("env_vars")
+        self._vars = dict(data.get("vars", {}))
+        for k in DEFAULT_KEYS:
+            self._vars.setdefault(k, "")
+        self.changed.emit()
+
     def import_from_scope(self, target_ip: str = "", domain: str = "") -> None:
         changed = False
         if target_ip:

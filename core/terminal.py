@@ -16,16 +16,17 @@ Sécurités :
 - Watchdog : pas de réponse > 10s = signal `unresponsive`.
 - Fermeture propre : SIGTERM -> 3s -> SIGKILL -> close fd PTY.
 
-Fallback : si `pty` n'est pas disponible (Windows exotique), on tombe
-sur QProcess classique (pas de PTY, moins bon mais ça tourne).
+Fallback : si `pty` n'est pas disponible, on tombe sur un subprocess
+classique (pas de PTY, moins bon mais ça tourne).
 """
 
 from __future__ import annotations
 
 import os
-import pty
-import select
+import queue
 import signal
+import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -33,15 +34,31 @@ from typing import List, Optional
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, QMutex, QMutexLocker
 
 from .logger import get_logger
+from .paths import PATHS
 from .process_tracker import ProcessTracker
 
 log = get_logger(__name__)
 
+try:
+    import pty
+    import select
+    _HAS_PTY = True
+except ImportError:  # pragma: no cover - Windows fallback
+    pty = None  # type: ignore[assignment]
+    select = None  # type: ignore[assignment]
+    _HAS_PTY = False
+
 
 _MAX_BUFFER_LINES = 50_000
 _WATCHDOG_TIMEOUT_SEC = 10.0
-_DUMP_DIR = Path("data/sessions/terminal_dumps")
+_DUMP_DIR = PATHS.terminal_dumps_dir
 _SIGTERM_GRACE_SEC = 3.0
+
+
+def _default_shell_command() -> List[str]:
+    if os.name == "nt":
+        return [os.environ.get("COMSPEC", "cmd.exe")]
+    return [os.environ.get("SHELL", "/bin/bash")]
 
 
 def _sanitize(raw_bytes: bytes) -> str:
@@ -70,7 +87,7 @@ class TerminalWorker(QThread):
         parent: Optional[QObject] = None,
     ):
         super().__init__(parent)
-        self.command = command or [os.environ.get("SHELL", "/bin/bash")]
+        self.command = command or _default_shell_command()
         self.cwd = cwd
         self.env = env
         self._process_tracker = process_tracker
@@ -78,9 +95,11 @@ class TerminalWorker(QThread):
 
         self._pid: Optional[int] = None
         self._master_fd: Optional[int] = None
+        self._proc: Optional[subprocess.Popen] = None
 
         self._stop_requested = False
         self._input_queue: List[bytes] = []
+        self._output_queue: "queue.Queue[bytes]" = queue.Queue()
         self._input_mutex = QMutex()
 
         self._buffer_lines = 0
@@ -114,17 +133,30 @@ class TerminalWorker(QThread):
         if pid is None:
             return
         if graceful:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except OSError:
-                pass
+            if self._proc is not None:
+                try:
+                    self._proc.terminate()
+                except OSError:
+                    pass
+            else:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass
 
     def force_kill(self) -> None:
         pid = self._pid
         if pid is None:
             return
+        if self._proc is not None:
+            try:
+                self._proc.kill()
+            except OSError:
+                pass
+            return
+        sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
         try:
-            os.kill(pid, signal.SIGKILL)
+            os.kill(pid, sigkill)
         except OSError:
             pass
 
@@ -132,20 +164,17 @@ class TerminalWorker(QThread):
 
     def run(self) -> None:
         """Boucle principale du thread : fork PTY + select I/O."""
-        try:
-            self._spawn()
-        except Exception as exc:
-            log.exception("Terminal spawn failed")
-            self.error_occurred.emit(f"Spawn failed: {exc}")
-            self.finished_signal.emit(-1)
-            return
-
         exit_code = -1
         try:
-            exit_code = self._io_loop()
+            if _HAS_PTY and os.name != "nt":
+                self._spawn()
+                exit_code = self._io_loop()
+            else:
+                self._spawn_subprocess()
+                exit_code = self._io_loop_subprocess()
         except Exception as exc:
-            log.exception("Terminal I/O loop crashed")
-            self.error_occurred.emit(f"I/O crash: {exc}")
+            log.exception("Terminal spawn/loop failed")
+            self.error_occurred.emit(f"Terminal failed: {exc}")
         finally:
             self._teardown()
             self.finished_signal.emit(exit_code)
@@ -153,6 +182,7 @@ class TerminalWorker(QThread):
     # ----------------------------------------------------------
 
     def _spawn(self) -> None:
+        assert pty is not None
         pid, fd = pty.fork()
         if pid == 0:
             # Process enfant
@@ -190,9 +220,36 @@ class TerminalWorker(QThread):
             )
         log.info("Terminal spawned PID=%d cmd=%s", pid, " ".join(self.command))
 
+    def _spawn_subprocess(self) -> None:
+        env = self.env or os.environ.copy()
+        if os.name != "nt":
+            env.pop("PROMPT_COMMAND", None)
+            env["PS1"] = r"\u@\h:\w\$ "
+            env.setdefault("TERM", "xterm-256color")
+        self._proc = subprocess.Popen(
+            self.command,
+            cwd=self.cwd,
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=0,
+        )
+        self._pid = self._proc.pid
+        if self._process_tracker:
+            self._process_tracker.register(
+                pid=self._proc.pid,
+                name=self._terminal_name,
+                category="terminal",
+                command=" ".join(self.command),
+            )
+        log.info("Terminal subprocess spawned PID=%d cmd=%s",
+                 self._proc.pid, " ".join(self.command))
+
     def _io_loop(self) -> int:
         assert self._master_fd is not None
         assert self._pid is not None
+        assert select is not None
         fd = self._master_fd
 
         while not self._stop_requested:
@@ -270,7 +327,93 @@ class TerminalWorker(QThread):
         # Stop demandé : SIGTERM propre puis SIGKILL après grace
         return self._terminate_child()
 
+    def _io_loop_subprocess(self) -> int:
+        assert self._proc is not None
+
+        def _reader() -> None:
+            stream = self._proc.stdout
+            if stream is None:
+                return
+            while True:
+                try:
+                    chunk = stream.read(4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                self._output_queue.put(chunk)
+
+        threading.Thread(
+            target=_reader,
+            daemon=True,
+            name=f"{self._terminal_name}-stdout",
+        ).start()
+
+        while not self._stop_requested:
+            with QMutexLocker(self._input_mutex):
+                pending_input = b"".join(self._input_queue)
+                self._input_queue.clear()
+            if pending_input and self._proc.stdin is not None:
+                try:
+                    self._proc.stdin.write(pending_input)
+                    self._proc.stdin.flush()
+                except (BrokenPipeError, OSError) as exc:
+                    self.error_occurred.emit(f"write failed: {exc}")
+                    break
+
+            while True:
+                try:
+                    chunk = self._output_queue.get_nowait()
+                except queue.Empty:
+                    break
+                self._handle_output(chunk)
+                if self._was_unresponsive:
+                    self._was_unresponsive = False
+                    self.alive_again.emit()
+
+            now = time.time()
+            waiting_for_output = (
+                self._last_input_ts > self._last_output_ts
+                and (now - self._last_input_ts) > _WATCHDOG_TIMEOUT_SEC
+            )
+            if waiting_for_output and not self._was_unresponsive:
+                self._was_unresponsive = True
+                self.unresponsive.emit()
+            elif not waiting_for_output and self._was_unresponsive:
+                self._was_unresponsive = False
+
+            rc = self._proc.poll()
+            if rc is not None:
+                while True:
+                    try:
+                        chunk = self._output_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    self._handle_output(chunk)
+                return int(rc)
+
+            time.sleep(0.05)
+
+        return self._terminate_child()
+
     def _terminate_child(self) -> int:
+        if self._proc is not None:
+            try:
+                self._proc.terminate()
+            except OSError:
+                pass
+            try:
+                return int(self._proc.wait(timeout=_SIGTERM_GRACE_SEC))
+            except subprocess.TimeoutExpired:
+                try:
+                    self._proc.kill()
+                except OSError:
+                    pass
+                try:
+                    return int(self._proc.wait(timeout=1.0))
+                except subprocess.TimeoutExpired:
+                    log.warning("Terminal PID %d did not stop after kill", self._pid or -1)
+                    return -1
         if self._pid is None:
             return -1
         try:
@@ -286,8 +429,9 @@ class TerminalWorker(QThread):
             if done == self._pid:
                 return os.WEXITSTATUS(status) if os.WIFEXITED(status) else -1
             time.sleep(0.1)
+        sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
         try:
-            os.kill(self._pid, signal.SIGKILL)
+            os.kill(self._pid, sigkill)
         except OSError:
             pass
         # Apres SIGKILL, on attend la mort avec un timeout pour eviter le
@@ -337,6 +481,13 @@ class TerminalWorker(QThread):
             except OSError:
                 pass
             self._master_fd = None
+        if self._proc is not None:
+            for stream in (self._proc.stdin, self._proc.stdout):
+                try:
+                    if stream:
+                        stream.close()
+                except OSError:
+                    pass
         if self._pid is not None and self._process_tracker:
             self._process_tracker.unregister(self._pid)
 

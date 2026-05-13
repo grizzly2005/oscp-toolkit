@@ -5,7 +5,7 @@ embarqué, outil externe) est enregistré ici. Au shutdown, tous les PIDs
 sont SIGTERM puis SIGKILL après 3 secondes. Au boot, on détecte les
 orphelins laissés par un crash précédent.
 
-Persistance : data/sessions/pids.json (atomic write).
+Persistance : data/runtime/sessions/pids.json (atomic write).
 """
 
 from __future__ import annotations
@@ -21,11 +21,12 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from .logger import get_logger
+from .paths import PATHS
 
 log = get_logger(__name__)
 
 _SIGTERM_GRACE_SECONDS = 3.0
-_SESSION_FILE = Path("data/sessions/pids.json")
+_SESSION_FILE = PATHS.sessions_dir / "pids.json"
 
 
 @dataclass
@@ -143,8 +144,9 @@ class ProcessTracker:
                 return True
             time.sleep(0.1)
 
+        sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
         try:
-            os.kill(pid, signal.SIGKILL)
+            os.kill(pid, sigkill)
         except OSError as exc:
             log.warning("SIGKILL %d failed: %s", pid, exc)
 

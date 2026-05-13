@@ -35,7 +35,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, QThread, pyqtSignal
 
 from .config_manager import ConfigManager
 from .logger import get_logger
@@ -43,6 +43,24 @@ from .logger import get_logger
 log = get_logger(__name__)
 
 _PLACEHOLDER_RE = re.compile(r"\{\{([A-Z_]+)(?::([A-Za-z0-9_]+))?\}\}")
+
+
+class _IntegrityWorker(QThread):
+    checked = pyqtSignal(dict)
+
+    def __init__(self, items: List[Tuple[str, str]], parent: Optional[QObject] = None):
+        super().__init__(parent)
+        self._items = items
+
+    def run(self) -> None:
+        result: Dict[str, bool] = {}
+        for name, path in self._items:
+            if not path:
+                result[name] = False
+                continue
+            p = Path(path)
+            result[name] = p.exists() or bool(shutil.which(path))
+        self.checked.emit(result)
 
 
 @dataclass
@@ -97,6 +115,7 @@ class ToolManager(QObject):
         self._integrity_cache_ts: float = 0.0
         self._integrity_cache_data: Dict[str, bool] = {}
         self._integrity_cache_ttl: float = 60.0
+        self._integrity_worker: Optional[_IntegrityWorker] = None
         self._load()
 
     # ----------------------------------------------------------
@@ -237,6 +256,40 @@ class ToolManager(QObject):
             len(result),
         )
         return result
+
+    def check_integrity_async(self, force: bool = False) -> None:
+        """Version non bloquante pour l'UI."""
+        now = time.time()
+        if (
+            not force
+            and self._integrity_cache_data
+            and (now - self._integrity_cache_ts) < self._integrity_cache_ttl
+        ):
+            self.integrity_checked.emit(self._integrity_cache_data)
+            return
+        if self._integrity_worker is not None and self._integrity_worker.isRunning():
+            return
+        items = [(t.name, t.path) for t in self._tools.values()]
+        worker = _IntegrityWorker(items, self)
+        worker.checked.connect(self._on_integrity_checked_async)
+        worker.finished.connect(lambda: setattr(self, "_integrity_worker", None))
+        worker.finished.connect(worker.deleteLater)
+        self._integrity_worker = worker
+        worker.start()
+
+    def _on_integrity_checked_async(self, result: Dict[str, bool]) -> None:
+        for name, ok in result.items():
+            t = self._tools.get(name)
+            if t is not None:
+                t.present = ok if t.path else None
+        self._integrity_cache_data = result
+        self._integrity_cache_ts = time.time()
+        self.integrity_checked.emit(result)
+        log.info(
+            "Integrity check : %d/%d tools present",
+            sum(1 for v in result.values() if v),
+            len(result),
+        )
 
     def invalidate_integrity_cache(self) -> None:
         """A appeler apres add/remove/update d'un outil."""

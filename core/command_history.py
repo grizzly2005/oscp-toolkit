@@ -1,6 +1,6 @@
 """Command History — log global de toutes les commandes lancées.
 
-Persisté dans data/sessions/command_history.jsonl (un JSON par ligne,
+Persisté dans data/runtime/sessions/command_history.jsonl (un JSON par ligne,
 append-only). Rotation à 10 000 entrées : on renomme en
 command_history.1.jsonl et on recommence.
 
@@ -31,11 +31,12 @@ from typing import Dict, Iterator, List, Optional
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from .logger import get_logger
+from .paths import PATHS
 
 log = get_logger(__name__)
 
 
-_HISTORY_FILE = Path("data/sessions/command_history.jsonl")
+_HISTORY_FILE = PATHS.sessions_dir / "command_history.jsonl"
 _MAX_ENTRIES = 10_000
 _MAX_ROTATIONS = 3
 

@@ -25,6 +25,7 @@ from typing import List, Optional
 
 from .config_manager import ConfigManager, ConfigError
 from .logger import get_logger
+from .paths import PATHS
 from .process_tracker import ProcessTracker, TrackedProcess
 
 log = get_logger(__name__)
@@ -354,7 +355,7 @@ def _check_orphans(pt: ProcessTracker) -> CheckResult:
 
 
 def _check_previous_session() -> CheckResult:
-    session_file = Path("data/sessions/last_session.json")
+    session_file = PATHS.sessions_dir / "last_session.json"
     if session_file.exists() and session_file.stat().st_size > 0:
         return CheckResult(
             name="Session précédente",
@@ -387,8 +388,8 @@ def run_preflight(
     report.results.append(_check_pyqt5())
     report.results.append(_check_display())
     report.results.append(_check_writable(config_manager.config_dir, "config/"))
-    report.results.append(_check_writable(Path("data"), "data/"))
-    report.results.append(_check_writable(Path("logs"), "logs/"))
+    report.results.append(_check_writable(PATHS.data_dir, "data/"))
+    report.results.append(_check_writable(PATHS.logs_dir, "logs/"))
     report.results.append(_check_config_loadable(config_manager))
 
     if not skip_optional:

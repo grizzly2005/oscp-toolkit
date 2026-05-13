@@ -345,10 +345,14 @@ class ConfigManager:
                             pass
                     json.dump(data, f, indent=2, ensure_ascii=False)
                     f.flush()
-                    try:
-                        os.fsync(f.fileno())
-                    except OSError:
-                        pass
+                    # os.replace() garde une ecriture atomique. Le fsync strict
+                    # est optionnel car il peut rendre les petites suppressions
+                    # perceptiblement lentes sur Windows/antivirus/lecteurs sync.
+                    if os.environ.get("OSCP_STRICT_FSYNC", "").lower() in ("1", "true", "yes"):
+                        try:
+                            os.fsync(f.fileno())
+                        except OSError:
+                            pass
                 os.replace(tmp, path)
                 log.debug("Saved config '%s' (%d bytes)", name, path.stat().st_size)
             except OSError as exc:

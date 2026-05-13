@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from PyQt5.QtCore import QObject, QTimer, pyqtSignal
+from PyQt5.QtCore import QObject, QThread, QTimer, pyqtSignal
 
 from .logger import get_logger
 
@@ -55,6 +55,21 @@ class NetworkSnapshot:
         return self.interfaces.get(name)
 
 
+class _NetworkRefreshWorker(QThread):
+    refreshed = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, collector, parent: Optional[QObject] = None):
+        super().__init__(parent)
+        self._collector = collector
+
+    def run(self) -> None:
+        try:
+            self.refreshed.emit(self._collector())
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class NetworkInfo(QObject):
     """Service d'information réseau avec auto-refresh."""
 
@@ -66,11 +81,12 @@ class NetworkInfo(QObject):
         self._snapshot = NetworkSnapshot()
         self._timer = QTimer(self)
         self._timer.setInterval(interval_ms)
-        self._timer.timeout.connect(self.refresh)
+        self._timer.timeout.connect(self.refresh_async)
         self._manual_override_ip: Optional[str] = None
+        self._refresh_worker: Optional[_NetworkRefreshWorker] = None
 
     def start(self) -> None:
-        self.refresh()
+        self.refresh_async()
         self._timer.start()
 
     def stop(self) -> None:
@@ -91,7 +107,22 @@ class NetworkInfo(QObject):
         return self._snapshot.attacker_ip()
 
     def refresh(self) -> NetworkSnapshot:
-        prev_vpn = self._snapshot.vpn_connected
+        snap = self._collect_snapshot()
+        self._apply_snapshot(snap)
+        return snap
+
+    def refresh_async(self) -> None:
+        if self._refresh_worker is not None and self._refresh_worker.isRunning():
+            return
+        worker = _NetworkRefreshWorker(self._collect_snapshot, self)
+        worker.refreshed.connect(self._apply_snapshot)
+        worker.failed.connect(lambda msg: log.warning("Network refresh failed: %s", msg))
+        worker.finished.connect(lambda: setattr(self, "_refresh_worker", None))
+        worker.finished.connect(worker.deleteLater)
+        self._refresh_worker = worker
+        worker.start()
+
+    def _collect_snapshot(self) -> NetworkSnapshot:
         ifaces = self._parse_ip_addr()
         if not ifaces:
             ifaces = self._parse_ifconfig()
@@ -103,13 +134,16 @@ class NetworkInfo(QObject):
             i.up and (i.name.startswith("tun") or i.name.startswith("wg"))
             for i in ifaces.values()
         )
+        return snap
+
+    def _apply_snapshot(self, snap: NetworkSnapshot) -> None:
+        prev_vpn = self._snapshot.vpn_connected
         self._snapshot = snap
 
         if snap.vpn_connected != prev_vpn:
             self.vpn_state_changed.emit(snap.vpn_connected)
 
         self.refreshed.emit(snap)
-        return snap
 
     # ----------------------------------------------------------
 

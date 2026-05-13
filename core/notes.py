@@ -1,7 +1,7 @@
 """Notes manager — une note Markdown par machine.
 
 Responsabilités :
-- CRUD notes (fichiers .md dans data/notes/<workspace>/)
+- CRUD notes (fichiers .md dans data/user/notes/<workspace>/)
 - Template auto à la création
 - Auto-save toutes les 30 secondes (coordonné avec l'UI)
 - Insertion de screenshots (compression PNG -> WebP si Pillow dispo)
@@ -25,6 +25,7 @@ from typing import Callable, Dict, List, Optional
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from .logger import get_logger
+from .paths import PATHS
 
 log = get_logger(__name__)
 
@@ -87,8 +88,8 @@ class NotesManager(QObject):
 
     def __init__(
         self,
-        notes_dir: Path | str = "data/notes/default",
-        screenshots_dir: Path | str = "data/screenshots",
+        notes_dir: Path | str = PATHS.notes_dir / "default",
+        screenshots_dir: Path | str = PATHS.screenshots_dir,
         parent: Optional[QObject] = None,
     ):
         super().__init__(parent)

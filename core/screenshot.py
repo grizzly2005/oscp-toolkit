@@ -1,6 +1,6 @@
 """Screenshot helper — capture ecran ou fenetre avec naming automatique.
 
-proof_<IP>_<timestamp>.png dans data/screenshots/
+proof_<IP>_<timestamp>.png dans data/user/screenshots/
 
 Methodes :
   - capture_active_window() : capture la fenetre active du toolkit

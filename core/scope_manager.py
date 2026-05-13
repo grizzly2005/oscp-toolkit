@@ -23,7 +23,7 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QCoreApplication, QObject, QTimer, pyqtSignal
 
 from .config_manager import ConfigManager
 from .logger import get_logger
@@ -115,6 +115,10 @@ class ScopeManager(QObject):
         self._subnets: List[Subnet] = []
         self._machines: Dict[str, Machine] = {}
         self._pivots: List[Pivot] = []
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(50)
+        self._save_timer.timeout.connect(self._save)
         self._load()
 
     # ----------------------------------------------------------
@@ -124,6 +128,7 @@ class ScopeManager(QObject):
         # Subnet et Pivot wrappes pour resilience : un champ inconnu ou
         # manquant dans un vieux scope.json ne casse plus l'app entiere.
         self._subnets = []
+        self._machines = {}
         for s in data.get("subnets", []):
             try:
                 self._subnets.append(Subnet(**s))
@@ -154,6 +159,28 @@ class ScopeManager(QObject):
             "pivots": [asdict(p) for p in self._pivots],
         })
 
+    def _save_soon(self) -> None:
+        if QCoreApplication.instance() is None:
+            self._save()
+            return
+        self._save_timer.start()
+
+    def flush_pending(self) -> None:
+        if self._save_timer.isActive():
+            self._save_timer.stop()
+            self._save()
+
+    def clear(self) -> None:
+        """Vide completement le scope courant."""
+        self._save_timer.stop()
+        self._subnets = []
+        self._machines = {}
+        self._pivots = []
+        self._save()
+        self.subnets_changed.emit()
+        self.machines_changed.emit()
+        self.pivots_changed.emit()
+
     # ---------- subnets ----------
 
     def subnets(self) -> List[Subnet]:
@@ -178,8 +205,8 @@ class ScopeManager(QObject):
 
     def remove_subnet(self, cidr: str) -> None:
         self._subnets = [s for s in self._subnets if s.cidr != cidr]
-        self._save()
         self.subnets_changed.emit()
+        self._save_soon()
 
     def subnet_for_ip(self, ip: str) -> Optional[Subnet]:
         for s in self._subnets:
@@ -244,8 +271,10 @@ class ScopeManager(QObject):
             if mid in s.machines:
                 s.machines.remove(mid)
         self._pivots = [p for p in self._pivots if p.from_machine != mid]
-        self._save()
         self.machines_changed.emit()
+        self.subnets_changed.emit()
+        self.pivots_changed.emit()
+        self._save_soon()
 
     def update_machine(self, m: Machine) -> None:
         self._machines[m.id] = m
@@ -282,8 +311,8 @@ class ScopeManager(QObject):
             p for p in self._pivots
             if not (p.from_machine == from_machine and p.to_cidr == to_cidr)
         ]
-        self._save()
         self.pivots_changed.emit()
+        self._save_soon()
 
     def set_pivot_active(self, from_machine: str, to_cidr: str, active: bool) -> None:
         for p in self._pivots:
