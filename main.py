@@ -33,6 +33,20 @@ def _excepthook(exc_type, exc_value, exc_tb):
     sys.__excepthook__(exc_type, exc_value, exc_tb)
 
 
+def _reset_workspace_state(result) -> None:
+    """Vide les donnees de session utilisateur sans toucher aux notes."""
+    try:
+        result.config.save("scope", {"subnets": [], "machines": [], "pivots": []})
+        result.config.invalidate("scope")
+    except Exception:
+        get_logger("main").exception("Cannot reset scope")
+    try:
+        result.config.reset("env_vars")
+        result.config.invalidate("env_vars")
+    except Exception:
+        get_logger("main").exception("Cannot reset env vars")
+
+
 def main() -> int:
     sys.excepthook = _excepthook
 
@@ -57,7 +71,12 @@ def main() -> int:
 
     # Preflight dialog (warnings)
     from ui.preflight_dialog import PreflightDialog
-    decisions = {"kill_orphans": False, "restore_session": False, "set_manual_ip": False}
+    decisions = {
+        "kill_orphans": False,
+        "restore_session": False,
+        "set_manual_ip": False,
+        "reset_workspace": False,
+    }
     if result.preflight_report.warnings:
         dlg = PreflightDialog(result.preflight_report)
         dlg.kill_orphans_requested.connect(lambda: decisions.update(kill_orphans=True))
@@ -94,7 +113,10 @@ def main() -> int:
         box.setWindowTitle("Session precedente")
         box.setIcon(QMessageBox.Question)
         box.setText(f"Une session precedente existe (sauvegardee : {age}).")
-        box.setInformativeText("Que veux-tu faire ?")
+        box.setInformativeText(
+            "Restaurer conserve le scope. Demarrer vierge vide IP, subnets, "
+            "machines, pivots et variables de cible."
+        )
         b_restore = box.addButton("Restaurer la session", QMessageBox.AcceptRole)
         b_blank = box.addButton("Demarrer vierge", QMessageBox.ActionRole)
         b_reset = box.addButton("Demarrer vierge + reset fenetre", QMessageBox.DestructiveRole)
@@ -117,9 +139,14 @@ def main() -> int:
             except Exception:
                 log.exception("Cannot remove layout.json")
             result.session.clear()
+            decisions["reset_workspace"] = True
         else:
             # Demarrer vierge -> on garde le layout mais on jette la session
             result.session.clear()
+            decisions["reset_workspace"] = True
+
+    if decisions["reset_workspace"]:
+        _reset_workspace_state(result)
 
     # Main window
     from ui.main_window import MainWindow

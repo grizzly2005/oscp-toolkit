@@ -26,7 +26,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import (
     QAction, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-    QInputDialog, QLineEdit, QMenu, QMessageBox, QPushButton,
+    QInputDialog, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton,
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget, QComboBox,
 )
 
@@ -90,25 +90,41 @@ class ScopePanel(QWidget):
     def __init__(self, scope_manager: ScopeManager, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._scope = scope_manager
+        self.setObjectName("scopePanel")
+        self._install_local_style()
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(2, 2, 2, 2)
+        root.setContentsMargins(4, 4, 4, 4)
+        root.setSpacing(5)
 
         actions = QHBoxLayout()
         btn_add_subnet = QPushButton("+ Subnet")
+        btn_add_subnet.setObjectName("scopeAdd")
         btn_add_subnet.clicked.connect(self._on_add_subnet)
         btn_add_machine = QPushButton("+ Machine")
+        btn_add_machine.setObjectName("scopeAdd")
         btn_add_machine.clicked.connect(self._on_add_machine)
         actions.addWidget(btn_add_subnet)
         actions.addWidget(btn_add_machine)
+        btn_clear_scope = QPushButton("Vider")
+        btn_clear_scope.setObjectName("scopeDanger")
+        btn_clear_scope.setToolTip("Vider IP, machines, subnets et pivots du scope")
+        btn_clear_scope.clicked.connect(self._on_clear_scope)
+        actions.addWidget(btn_clear_scope)
         actions.addStretch()
         root.addLayout(actions)
+
+        self._summary = QLabel()
+        self._summary.setObjectName("scopeSummary")
+        root.addWidget(self._summary)
 
         self._tree = QTreeWidget()
         self._tree.setHeaderLabels(["Scope", "Status", "OS"])
         self._tree.setColumnWidth(0, 240)
         self._tree.setColumnWidth(1, 90)
         self._tree.setAlternatingRowColors(True)
+        self._tree.setUniformRowHeights(True)
+        self._tree.setRootIsDecorated(True)
         self._tree.itemSelectionChanged.connect(self._on_selection_changed)
         self._tree.itemDoubleClicked.connect(self._on_double_click)
         self._tree.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -128,6 +144,7 @@ class ScopePanel(QWidget):
             selected_mid = self._tree.currentItem().data(0, Qt.UserRole)
 
         self._tree.clear()
+        self._update_summary()
         # Group machines by subnet
         subnet_items = {}
         for s in self._scope.subnets():
@@ -135,9 +152,11 @@ class ScopePanel(QWidget):
             if s.pivot_via:
                 pv = self._scope.machine(s.pivot_via)
                 via = (pv.hostname or pv.ip) if pv else s.pivot_via
-                label += f"[via {via}]"
+                label += f"  via {via}"
             item = QTreeWidgetItem([label, "", ""])
             f = item.font(0); f.setBold(True); item.setFont(0, f)
+            item.setForeground(0, QColor("#4fc3f7"))
+            item.setBackground(0, QColor("#202a30"))
             item.setData(0, Qt.UserRole, f"subnet:{s.cidr}")
             subnet_items[s.cidr] = item
             self._tree.addTopLevelItem(item)
@@ -162,13 +181,19 @@ class ScopePanel(QWidget):
             line = f"{m.ip} - {host}"
             mitem = QTreeWidgetItem([line, status_label, m.os or ""])
             mitem.setData(0, Qt.UserRole, m.id)
+            mitem.setToolTip(0, self._machine_tooltip(m))
             # couleur selon status
             if m.status == "rooted":
-                mitem.setForeground(1, QColor("#2e7d32"))
+                mitem.setForeground(1, QColor("#81c784"))
+                mitem.setBackground(1, QColor("#1f2d22"))
             elif m.status == "in_progress":
-                mitem.setForeground(1, QColor("#e67e00"))
+                mitem.setForeground(1, QColor("#ffb74d"))
+                mitem.setBackground(1, QColor("#302719"))
             elif m.status == "skipped":
                 mitem.setForeground(1, QColor("#777"))
+                mitem.setBackground(1, QColor("#252526"))
+            else:
+                mitem.setForeground(1, QColor("#bcaaa4"))
             parent.addChild(mitem)
 
             if selected_mid == m.id:
@@ -176,6 +201,37 @@ class ScopePanel(QWidget):
 
         if orphan_attached:
             self._tree.addTopLevelItem(orphan_item)
+        if not self._scope.machines() and not self._scope.subnets():
+            empty = QTreeWidgetItem(["Scope vide - ajoute une machine ou un subnet", "", ""])
+            empty.setFlags(Qt.NoItemFlags)
+            empty.setForeground(0, QColor("#777"))
+            self._tree.addTopLevelItem(empty)
+        self._tree.resizeColumnToContents(1)
+        self._tree.resizeColumnToContents(2)
+
+    def _update_summary(self) -> None:
+        machines = self._scope.machines()
+        rooted = len([m for m in machines if m.status == "rooted"])
+        active = len([m for m in machines if m.status == "in_progress"])
+        self._summary.setText(
+            f"Scope  |  {len(machines)} cible(s)  |  "
+            f"{len(self._scope.subnets())} subnet(s)  |  "
+            f"{active} active(s)  |  {rooted} rooted"
+        )
+
+    @staticmethod
+    def _machine_tooltip(m: Machine) -> str:
+        lines = [
+            f"IP: {m.ip or '-'}",
+            f"Hostname: {m.hostname or '-'}",
+            f"OS: {m.os or '-'}",
+            f"Status: {m.status}",
+        ]
+        if m.difficulty:
+            lines.append(f"Difficulty: {m.difficulty}")
+        if m.points:
+            lines.append(f"Points: {m.points}")
+        return "\n".join(lines)
 
     # ---------- actions ----------
 
@@ -198,6 +254,17 @@ class ScopePanel(QWidget):
             self._scope.add_machine(**v)
         except ValueError as exc:
             error_box(self, "Erreur", str(exc))
+
+    def _on_clear_scope(self) -> None:
+        if not self._scope.machines() and not self._scope.subnets() and not self._scope.pivots():
+            return
+        if confirm(
+            self,
+            "Vider le scope",
+            "Supprimer toutes les IP, machines, subnets et pivots du scope ?",
+        ):
+            self._scope.clear()
+            self.machine_selected.emit(None)
 
     def _on_selection_changed(self) -> None:
         item = self._tree.currentItem()
@@ -240,7 +307,7 @@ class ScopePanel(QWidget):
         if isinstance(data, str) and data.startswith("subnet:"):
             cidr = data.split(":", 1)[1]
             rm = QAction("Supprimer subnet", self)
-            rm.triggered.connect(lambda: self._scope.remove_subnet(cidr))
+            rm.triggered.connect(lambda: self._delete_subnet(cidr))
             menu.addAction(rm)
             menu.exec_(self._tree.viewport().mapToGlobal(point))
             return
@@ -283,6 +350,34 @@ class ScopePanel(QWidget):
         except ValueError as exc:
             error_box(self, "Erreur", str(exc))
 
+    def _delete_subnet(self, cidr: str) -> None:
+        self._scope.remove_subnet(cidr)
+        self.machine_selected.emit(None)
+
     def _on_delete_machine(self, m: Machine) -> None:
         if confirm(self, "Supprimer", f"Supprimer la machine {m.ip} ({m.hostname}) ?"):
             self._scope.remove_machine(m.id)
+            self.machine_selected.emit(None)
+
+    def _install_local_style(self) -> None:
+        self.setStyleSheet("""
+            QWidget#scopePanel QLabel#scopeSummary {
+                background: #202a30;
+                color: #b0bec5;
+                border: 1px solid #36515d;
+                border-radius: 4px;
+                padding: 5px 8px;
+                font-weight: bold;
+            }
+            QWidget#scopePanel QPushButton#scopeAdd {
+                background: #2c4a5e;
+                border-color: #4fc3f7;
+                color: #ffffff;
+                font-weight: bold;
+            }
+            QWidget#scopePanel QPushButton#scopeDanger {
+                background: #3b2b23;
+                border-color: #ffb74d;
+                color: #ffe0b2;
+            }
+        """)

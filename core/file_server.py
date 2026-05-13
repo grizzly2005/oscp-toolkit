@@ -16,6 +16,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -94,7 +95,7 @@ class FileServerManager(QObject):
         if not d.is_dir():
             raise ValueError(f"Not a directory: {directory}")
         actual_port = _free_port(port)
-        cmd = ["python3", "-m", "http.server", str(actual_port)]
+        cmd = [sys.executable, "-m", "http.server", str(actual_port)]
         proc = subprocess.Popen(
             cmd,
             cwd=str(d),
@@ -102,37 +103,9 @@ class FileServerManager(QObject):
             stderr=subprocess.DEVNULL,
             preexec_fn=os.setsid if hasattr(os, "setsid") else None,
         )
-        # Verifier que le serveur a vraiment demarre. Race possible :
-        # entre _free_port() qui ferme son socket de test et Popen,
-        # un autre process peut grab le port. Le subprocess se ferme
-        # alors silencieusement (stderr=DEVNULL).
-        # On laisse 1.5s pour le startup puis on probe.
-        import time
-        startup_ok = False
-        for _ in range(15):  # 15 * 0.1s = 1.5s max
-            time.sleep(0.1)
-            if proc.poll() is not None:
-                # process termine -> erreur
-                break
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(0.2)
-                try:
-                    s.connect(("127.0.0.1", actual_port))
-                    startup_ok = True
-                    break
-                except (OSError, socket.timeout):
-                    continue
-        if not startup_ok:
-            # Cleanup : kill le proc si encore vivant, et raise
-            if proc.poll() is None:
-                try:
-                    proc.kill()
-                    proc.wait(timeout=1)
-                except (OSError, subprocess.TimeoutExpired):
-                    pass
+        if proc.poll() is not None:
             raise RuntimeError(
-                f"HTTP server failed to start on port {actual_port} "
-                f"(port likely taken by another process)"
+                f"HTTP server failed to start on port {actual_port}"
             )
         sid = f"http_{uuid.uuid4().hex[:8]}"
         share = FileShare(

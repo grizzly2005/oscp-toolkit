@@ -202,7 +202,7 @@ class MainWindow(QMainWindow):
         self._network.start()
 
         # --- Vérification intégrité des outils (async) ---
-        QTimer.singleShot(500, self._tools.check_integrity)
+        QTimer.singleShot(500, self._tools.check_integrity_async)
 
         # --- Auto-save session 30s (resilience aux crashes) ---
         # Si Qt crashe ou si on kill le process, la session sauvee a t-30s
@@ -513,19 +513,19 @@ class MainWindow(QMainWindow):
         m_file = mb.addMenu("&Fichier")
 
         # ----- Session -----
-        act_new_session = QAction("Nouvelle session", self)
+        act_new_session = QAction("Nouvelle session vierge", self)
         act_new_session.setShortcut(QKeySequence("Ctrl+Shift+N"))
-        act_new_session.setToolTip("Ferme tous les terminaux et notes ouvertes (la session sauvegardee n'est pas touchee)")
+        act_new_session.setToolTip("Ferme les terminaux, vide le scope et remet les variables de cible a zero")
         act_new_session.triggered.connect(self._on_new_session)
         m_file.addAction(act_new_session)
 
-        act_reset_window = QAction("Reinitialiser la fenetre", self)
-        act_reset_window.setToolTip("Restaure la disposition par defaut des panneaux (efface layout.json)")
+        act_reset_window = QAction("Reinitialiser fenetre + session", self)
+        act_reset_window.setToolTip("Restaure la disposition et vide IP, subnets, machines et variables de cible")
         act_reset_window.triggered.connect(self._on_reset_window)
         m_file.addAction(act_reset_window)
 
         act_clear_saved = QAction("Effacer la session sauvegardee", self)
-        act_clear_saved.setToolTip("Supprime data/sessions/last_session.json -- au prochain demarrage on partira vierge")
+        act_clear_saved.setToolTip("Supprime data/runtime/sessions/last_session.json -- au prochain demarrage on partira vierge")
         act_clear_saved.triggered.connect(self._on_clear_saved_session)
         m_file.addAction(act_clear_saved)
 
@@ -580,7 +580,7 @@ class MainWindow(QMainWindow):
 
         m_tools = mb.addMenu("&Outils")
         m_tools.addAction(QAction("Vérifier l'intégrité des outils", self,
-                                   triggered=lambda: self._tools.check_integrity(force=True)))
+                                   triggered=lambda: self._tools.check_integrity_async(force=True)))
         m_tools.addAction(QAction("AutoGrep sur le presse-papier", self,
                                    triggered=self._on_autogrep_clipboard))
         m_tools.addSeparator()
@@ -621,7 +621,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+K"), self, lambda: self._dock_clip.raise_())
         QShortcut(QKeySequence("Ctrl+H"), self, lambda: self._dock_history.raise_())
         QShortcut(QKeySequence("Ctrl+W"), self, self._on_close_current_tab)
-        QShortcut(QKeySequence("F5"), self, lambda: self._tools.check_integrity(force=True))
+        QShortcut(QKeySequence("F5"), self, lambda: self._tools.check_integrity_async(force=True))
         # F2/F3/F4 pour les boutons services (Listener/HTTP/Ligolo).
         # On utilise QShortcut plutot que QToolButton.setShortcut qui peut
         # freezer la fenetre sur WSLg/xcb (grab clavier corrompu).
@@ -1033,17 +1033,15 @@ class MainWindow(QMainWindow):
     # ==============================================================
 
     def _on_new_session(self) -> None:
-        """Ferme tous les terminaux + retourne aux notes vides.
-
-        N'efface pas les notes du disque ni la session sauvegardee --
-        c'est juste un "redemarrage propre" en RAM.
-        """
+        """Ferme les terminaux et repart sur un scope propre."""
         from ui.dialogs import confirm
         active = [w for w in self._terminals.all() if w.isRunning()]
-        msg = "Demarrer une nouvelle session ?"
+        msg = "Demarrer une nouvelle session vierge ?"
         if active:
             msg += f"\n\n{len(active)} terminal(s) actif(s) seront termines."
-        msg += "\n\nLa session actuelle ne sera pas sauvegardee."
+        msg += "\n\nLe scope sera vide : IP, machines, subnets et pivots."
+        msg += "\nLes variables TARGET/DOMAIN/USER/PASS/HASH seront remises a zero."
+        msg += "\nLa session sauvegardee sera effacee."
         msg += "\nLes notes sur disque sont conservees."
         if not confirm(self, "Nouvelle session", msg):
             return
@@ -1072,10 +1070,30 @@ class MainWindow(QMainWindow):
             self._notes.set_active(None)
         except Exception:
             pass
-        self.statusBar().showMessage("Nouvelle session demarree", 3000)
+        self._reset_session_data()
+        self.statusBar().showMessage("Nouvelle session vierge demarree", 3000)
+
+    def _reset_session_data(self) -> None:
+        """Vide les donnees qui definissent la session de travail courante."""
+        try:
+            self._scope.clear()
+        except Exception:
+            log.exception("Cannot clear scope")
+        try:
+            self._env.reset_to_defaults()
+        except Exception:
+            log.exception("Cannot reset env vars")
+        try:
+            self._network.set_manual_ip(None)
+        except Exception:
+            log.exception("Cannot reset manual IP")
+        try:
+            self._session.clear()
+        except Exception:
+            log.exception("Cannot clear saved session")
 
     def _on_reset_window(self) -> None:
-        """Restaure la disposition par defaut des panneaux.
+        """Restaure la disposition par defaut et vide la session de travail.
 
         Efface layout.json, invalide le cache du ConfigManager,
         re-applique la geometrie par defaut (centree sur ecran primaire),
@@ -1086,8 +1104,9 @@ class MainWindow(QMainWindow):
         from ui.dialogs import confirm
         if not confirm(
             self, "Reinitialiser la fenetre",
-            "Effacer la disposition sauvegardee et remettre la fenetre\n"
-            "en taille/position par defaut ?",
+            "Effacer la disposition sauvegardee, remettre la fenetre\n"
+            "en taille/position par defaut et vider IP/subnets/machines ?\n\n"
+            "Les notes sur disque sont conservees.",
         ):
             return
         try:
@@ -1124,9 +1143,10 @@ class MainWindow(QMainWindow):
                 dock.setFloating(False)
                 dock.show()
             self._dock_creds.raise_()
+            self._reset_session_data()
 
             self.statusBar().showMessage(
-                "Fenetre reinitialisee", 3000
+                "Fenetre et session reinitialisees", 3000
             )
         except Exception as exc:
             log.exception("Reset window failed")
@@ -2081,6 +2101,23 @@ class MainWindow(QMainWindow):
 
     # ---------- SessionState ----------
 
+    def _session_docks(self) -> List[QDockWidget]:
+        docks = [
+            self._dock_tools, self._dock_scope, self._dock_notes,
+            self._dock_docs, self._dock_creds, self._dock_clip,
+            self._dock_history, self._dock_targets, self._dock_wordlists,
+        ]
+        if hasattr(self, "_dock_fs"):
+            docks.append(self._dock_fs)
+        return docks
+
+    def _restore_open_panels(self, open_panels: List[str]) -> None:
+        if not open_panels:
+            return
+        visible = set(open_panels)
+        for dock in self._session_docks():
+            dock.setVisible(dock.objectName() in visible)
+
     def serialize_state(self) -> SessionState:
         """Rend un SessionState pour SessionManager.save()."""
         terms: List[TerminalSession] = []
@@ -2110,11 +2147,7 @@ class MainWindow(QMainWindow):
             active_note=active.name if active else None,
             active_tab_index=self._tabs.currentIndex(),
             open_panels=[
-                d.objectName() for d in [
-                    self._dock_tools, self._dock_scope, self._dock_notes,
-                    self._dock_docs, self._dock_creds, self._dock_clip,
-                    self._dock_history, self._dock_targets, self._dock_wordlists,
-                ] if d.isVisible()
+                d.objectName() for d in self._session_docks() if d.isVisible()
             ],
         )
 
@@ -2128,6 +2161,7 @@ class MainWindow(QMainWindow):
             note = self._notes.get(state.active_note)
             if note:
                 self._notes.set_active(note.name)
+        self._restore_open_panels(state.open_panels)
         # Restore des terminaux : on NE relance PAS automatiquement les commandes
         # (sécurité : on ne veut pas relancer un scan à l'insu de l'user).
         # On recrée des shells vides avec le bon titre.
@@ -2204,4 +2238,8 @@ class MainWindow(QMainWindow):
                 self._tool_setup.shutdown()
         except Exception:
             log.exception("ToolSetup shutdown failed")
+        try:
+            self._scope.flush_pending()
+        except Exception:
+            log.exception("Scope flush failed")
         event.accept()

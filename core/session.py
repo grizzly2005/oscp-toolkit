@@ -7,7 +7,7 @@ Ce qui est persisté :
 - Workspace actif
 - État des docks/splitters
 
-Fichier : data/sessions/last_session.json (atomic write).
+Fichier : data/runtime/sessions/last_session.json (atomic write).
 Auto-save sur chaque action "significative" (cf main_window).
 """
 
@@ -21,10 +21,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .logger import get_logger
+from .paths import PATHS
 
 log = get_logger(__name__)
 
-_SESSION_FILE = Path("data/sessions/last_session.json")
+_SESSION_FILE = PATHS.sessions_dir / "last_session.json"
 
 
 @dataclass

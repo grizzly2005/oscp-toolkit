@@ -200,7 +200,7 @@ class ToolPanel(QWidget):
     # ----------------------------------------------------------
 
     def _on_check_integrity(self) -> None:
-        self._tm.check_integrity(force=True)
+        self._tm.check_integrity_async(force=True)
 
     def _on_new_tool(self) -> None:
         dlg = ToolEditDialog(parent=self)
