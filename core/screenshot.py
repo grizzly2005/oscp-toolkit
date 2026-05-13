@@ -30,6 +30,12 @@ log = get_logger(__name__)
 SCREENSHOT_DIR = PATHS.screenshots_dir
 
 
+def set_screenshot_dir(path: Path | str) -> None:
+    global SCREENSHOT_DIR
+    SCREENSHOT_DIR = Path(path)
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+
+
 def _ensure_dir() -> Path:
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     return SCREENSHOT_DIR

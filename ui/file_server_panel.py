@@ -51,17 +51,19 @@ class FileServerPanel(QWidget):
         self,
         file_servers: FileServerManager,
         attacker_ip_getter,
+        serving_dir: Optional[Path | str] = None,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
         self._fs = file_servers
         self._get_ip = attacker_ip_getter
+        self._serving_dir = Path(serving_dir) if serving_dir else SERVING_DIR
         self._pulse_on = False
         self.setObjectName("fileServerPanel")
         self._install_local_style()
 
         # Serving dir
-        SERVING_DIR.mkdir(parents=True, exist_ok=True)
+        self._serving_dir.mkdir(parents=True, exist_ok=True)
 
         # State
         self._current_share = None  # FileShare actif
@@ -220,7 +222,7 @@ class FileServerPanel(QWidget):
         bg = "#17231c" if self._current_share else "#1a1a1a"
         self._drop_zone.setStyleSheet(
             f"QLabel {{ background:{bg}; border:2px dashed {color}; "
-            "border-radius:6px; padding:18px; }}"
+            "border-radius:6px; padding:18px; }"
         )
 
     def dropEvent(self, event: QDropEvent) -> None:
@@ -256,7 +258,7 @@ class FileServerPanel(QWidget):
                 "Glisse les fichiers individuellement ou zippe-les."
             )
             return False
-        dest = SERVING_DIR / src.name
+        dest = self._serving_dir / src.name
         try:
             if dest.exists():
                 # Overwrite silencieux (on veut pas bloquer le flow)
@@ -287,12 +289,12 @@ class FileServerPanel(QWidget):
     def _on_clear_all(self) -> None:
         res = QMessageBox.question(
             self, "Tout effacer",
-            f"Supprimer tous les fichiers du dossier {SERVING_DIR} ?",
+            f"Supprimer tous les fichiers du dossier {self._serving_dir} ?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if res != QMessageBox.Yes:
             return
-        for f in SERVING_DIR.iterdir():
+        for f in self._serving_dir.iterdir():
             try:
                 if f.is_file():
                     f.unlink()
@@ -311,7 +313,7 @@ class FileServerPanel(QWidget):
     def _start_server(self) -> None:
         try:
             port = self._port_spin.value()
-            share = self._fs.start_http(str(SERVING_DIR), port=port)
+            share = self._fs.start_http(str(self._serving_dir), port=port)
             self._current_share = share
             self._btn_start.setText("Arreter")
             self._btn_start.setObjectName("fsStop")
@@ -342,7 +344,7 @@ class FileServerPanel(QWidget):
             ip = self._get_ip() or "LHOST"
             self._status_lbl.setText(
                 f"[OK] http://{ip}:{self._current_share.port}/ "
-                f"({len(list(SERVING_DIR.glob('*')))} fichiers)"
+                f"({len(list(self._serving_dir.glob('*')))} fichiers)"
             )
             self._status_lbl.setStyleSheet("color:#81c784;")
         else:
@@ -352,7 +354,7 @@ class FileServerPanel(QWidget):
         self._pulse_status()
 
     def _sync_current_share(self) -> None:
-        share = self._fs.active_http(str(SERVING_DIR))
+        share = self._fs.active_http(str(self._serving_dir))
         if share is not self._current_share:
             self._current_share = share
             self._btn_start.setText("Arreter" if share else "Demarrer")
@@ -364,7 +366,7 @@ class FileServerPanel(QWidget):
 
     def _refresh_table(self) -> None:
         self._sync_current_share()
-        files = sorted([p for p in SERVING_DIR.glob("*") if p.is_file()])
+        files = sorted([p for p in self._serving_dir.glob("*") if p.is_file()])
         self._table.setRowCount(len(files))
         ip = self._get_ip() or "LHOST"
         port = self._current_share.port if self._current_share else self._port_spin.value()
@@ -421,7 +423,7 @@ class FileServerPanel(QWidget):
             self._copy_text(snippet)
         elif chosen is act_delete:
             try:
-                (SERVING_DIR / name).unlink()
+                (self._serving_dir / name).unlink()
                 self._refresh_table()
                 self._sync_snippet_buttons()
             except OSError as exc:
@@ -478,13 +480,17 @@ class FileServerPanel(QWidget):
             return
         if not self._current_share:
             self._status_dot.setStyleSheet(
-                "background:#555; border-radius:6px; border:1px solid #333;"
+                "QLabel { background-color: #555; border-radius: 6px; border: 1px solid #333; }"
             )
             return
         self._pulse_on = not self._pulse_on
         color = "#81c784" if self._pulse_on else "#2f6b45"
         self._status_dot.setStyleSheet(
-            f"background:{color}; border-radius:6px; border:1px solid #b9f6ca;"
+            "QLabel {"
+            f"background-color: {color};"
+            "border-radius: 6px;"
+            "border: 1px solid #b9f6ca;"
+            "}"
         )
 
     def _open_serving_dir(self) -> None:
@@ -497,7 +503,7 @@ class FileServerPanel(QWidget):
             if path:
                 try:
                     subprocess.Popen(
-                        [path, str(SERVING_DIR)],
+                        [path, str(self._serving_dir)],
                         stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
@@ -510,7 +516,7 @@ class FileServerPanel(QWidget):
         # Fallback Qt
         from PyQt5.QtCore import QUrl
         from PyQt5.QtGui import QDesktopServices
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(SERVING_DIR)))
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._serving_dir)))
 
     def _install_local_style(self) -> None:
         self.setStyleSheet("""

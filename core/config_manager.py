@@ -96,6 +96,7 @@ class ConfigManager:
         self.register_validator("clipboard_pins", _validate_clipboard)
         self.register_validator("wordlists", _validate_wordlists)
         self.register_validator("revshells", _validate_revshells)
+        self.register_validator("exam_workspace", _validate_exam_workspace)
 
     # --------------------------------------------------------------
     # Migrations de schema
@@ -473,3 +474,7 @@ def _validate_wordlists(data: Any) -> bool:
 
 def _validate_revshells(data: Any) -> bool:
     return _is_dict(data) and _is_dict(data.get("shells", None))
+
+
+def _validate_exam_workspace(data: Any) -> bool:
+    return _is_dict(data) and isinstance(data.get("root_path", ""), str)

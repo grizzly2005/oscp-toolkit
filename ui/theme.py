@@ -1,5 +1,6 @@
 """Thème dark cohérent — v1.1 (fix boutons + layout)."""
 from __future__ import annotations
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import QApplication
 
@@ -18,6 +19,14 @@ _OK          = QColor("#81c784")
 
 def apply_dark_theme(app: QApplication) -> None:
     app.setStyle("Fusion")
+    for effect in (
+        Qt.UI_AnimateMenu,
+        Qt.UI_FadeMenu,
+        Qt.UI_AnimateCombo,
+        Qt.UI_AnimateTooltip,
+        Qt.UI_FadeTooltip,
+    ):
+        app.setEffectEnabled(effect, False)
 
     palette = QPalette()
     palette.setColor(QPalette.Window,           _BG)

@@ -33,15 +33,19 @@ class TransferDialog(QDialog):
         self,
         attacker_ip: str = "",
         file_server_manager: Optional[FileServerManager] = None,
+        serving_dir: Optional[Path | str] = None,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
         self._fs = file_server_manager
+        self._serving_dir = Path(serving_dir) if serving_dir else DEFAULT_SERVING_DIR
         self._attacker_ip = attacker_ip
         self._last_pairs: List[TransferPair] = []
         self._pulse_on = False
+        self._closing = False
 
         self.setWindowTitle("Transfer Helper")
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setMinimumSize(900, 680)
         self._install_local_style()
 
@@ -69,6 +73,10 @@ class TransferDialog(QDialog):
         self._pulse_timer.setInterval(650)
         self._pulse_timer.timeout.connect(self._pulse_status)
         self._pulse_timer.start()
+
+        self._summary_reset_timer = QTimer(self)
+        self._summary_reset_timer.setSingleShot(True)
+        self._summary_reset_timer.timeout.connect(lambda: self._set_summary("Prêt"))
 
     # -- Build ---------------------------------------------------------------
 
@@ -260,7 +268,7 @@ class TransferDialog(QDialog):
         badge.setObjectName("transferBadge")
         badge.setStyleSheet(
             f"QLabel#transferBadge {{ background:{color}; color:#101010; "
-            "border-radius:3px; padding:2px 7px; font-weight:bold; }}"
+            "border-radius:3px; padding:2px 7px; font-weight:bold; }"
         )
         head.addWidget(badge)
 
@@ -326,14 +334,14 @@ class TransferDialog(QDialog):
         if self._fs is None:
             return
         file_path = self._file_edit.text().strip()
-        DEFAULT_SERVING_DIR.mkdir(parents=True, exist_ok=True)
-        directory = str(DEFAULT_SERVING_DIR)
+        self._serving_dir.mkdir(parents=True, exist_ok=True)
+        directory = str(self._serving_dir)
         if file_path:
             src = Path(file_path)
             if not src.is_file():
                 self._set_summary("Fichier introuvable", "#ef5350", reset=True)
                 return
-            staged = DEFAULT_SERVING_DIR / src.name
+            staged = self._serving_dir / src.name
             try:
                 if src.resolve() != staged.resolve():
                     shutil.copy2(src, staged)
@@ -362,17 +370,46 @@ class TransferDialog(QDialog):
     # -- Visual feedback -----------------------------------------------------
 
     def _set_summary(self, text: str, color: str = "#9e9e9e", reset: bool = False) -> None:
+        if self._closing or not hasattr(self, "_summary"):
+            return
         self._summary.setText(text)
-        self._summary.setStyleSheet(f"color:{color}; font-weight:bold;")
+        self._summary.setStyleSheet(
+            f"QLabel#transferSummary {{ color: {color}; font-weight: bold; }}"
+        )
         if reset:
-            QTimer.singleShot(1300, lambda: self._set_summary("Prêt"))
+            self._summary_reset_timer.start(700)
 
     def _pulse_status(self) -> None:
+        if self._closing or not hasattr(self, "_status_dot"):
+            return
         self._pulse_on = not self._pulse_on
         color = "#4fc3f7" if self._pulse_on else "#2d7f9f"
         self._status_dot.setStyleSheet(
-            f"background:{color}; border-radius:6px; border:1px solid #8ee7ff;"
+            "QLabel#transferDot {"
+            f"background-color: {color};"
+            "border-radius: 6px;"
+            "border: 1px solid #8ee7ff;"
+            "}"
         )
+
+    def _stop_feedback_timers(self) -> None:
+        self._closing = True
+        for timer_name in ("_pulse_timer", "_summary_reset_timer"):
+            timer = getattr(self, timer_name, None)
+            if timer is not None:
+                timer.stop()
+
+    def reject(self) -> None:
+        self._stop_feedback_timers()
+        super().reject()
+
+    def accept(self) -> None:
+        self._stop_feedback_timers()
+        super().accept()
+
+    def closeEvent(self, event) -> None:
+        self._stop_feedback_timers()
+        super().closeEvent(event)
 
     def _install_local_style(self) -> None:
         self.setStyleSheet("""
