@@ -126,6 +126,7 @@ class ExternalTerminal(QObject):
         cwd: Optional[str] = None,
         backend: str = "auto",
         initial_command: Optional[str] = None,
+        extra_exports: Optional[dict] = None,
     ) -> None:
         """Lance un terminal externe.
 
@@ -139,6 +140,8 @@ class ExternalTerminal(QObject):
         extra = {}
         if title:
             extra["OSCP_SESSION"] = title
+        if extra_exports:
+            extra.update(extra_exports)
         script = self._env.write_session_script(extra_exports=extra)
 
         # Cleanup periodique des vieux scripts

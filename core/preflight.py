@@ -164,7 +164,7 @@ def _check_config_loadable(cm: ConfigManager) -> CheckResult:
     critical = [
         "tools", "links", "workspaces", "shortcuts",
         "layout", "scope", "credentials", "clipboard_pins",
-        "wordlists", "revshells",
+        "wordlists", "revshells", "exam_workspace",
     ]
     failed = []
     recovered = []

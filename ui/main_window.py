@@ -53,6 +53,7 @@ from core.wordlist_manager import WordlistManager
 from core.autogrep import run_all  # returns Dict[str, List[Finding]]
 from core.proof_tracker import ProofTracker
 from core.env_manager import EnvManager
+from core.exam_workspace import ExamWorkspaceManager
 from core.external_terminal import ExternalTerminal
 
 from ui.tool_panel import ToolPanel
@@ -70,7 +71,7 @@ from ui.revshell_dialog import RevshellDialog
 from ui.encoder_dialog import EncoderDialog
 from ui.hash_dialog import HashDialog
 from ui.transfer_dialog import TransferDialog
-from ui.dialogs import PlaceholderDialog, confirm, info_box, error_box
+from ui.dialogs import PlaceholderDialog, TemplatePickerDialog, confirm, info_box, error_box
 from ui.env_dialog import EnvDialog
 from ui.exam_timer import ExamTimer
 from ui.find_bar import FindBar
@@ -78,7 +79,7 @@ from ui.central_stack import CentralStack
 from ui.file_server_panel import FileServerPanel
 from ui.command_palette import CommandPalette, PaletteAction
 from core.tool_setup_registry import ToolSetupRegistry
-from core.screenshot import capture_active_window
+from core.screenshot import capture_active_window, set_screenshot_dir
 
 log = get_logger(__name__)
 
@@ -151,15 +152,21 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("OSCP Toolkit")
         self.setObjectName("OSCPToolkitMain")
+        self.setAnimated(False)
         self.setDockOptions(
-            QMainWindow.AnimatedDocks
-            | QMainWindow.AllowNestedDocks
+            QMainWindow.AllowNestedDocks
             | QMainWindow.AllowTabbedDocks
         )
 
         # --- Managers métier (ordre = graphe de dépendance) ---
+        self._exam       = ExamWorkspaceManager(config, self)
+        set_screenshot_dir(self._exam.screenshots_dir)
         self._tools      = ToolManager(config, self)
-        self._notes      = NotesManager(parent=self)
+        self._notes      = NotesManager(
+            notes_dir=self._exam.notes_dir,
+            screenshots_dir=self._exam.screenshots_dir,
+            parent=self,
+        )
         self._scope      = ScopeManager(config, self)
         self._vault      = CredentialVault(config, self)
         self._clipboard  = ClipboardManager(config, parent=self)
@@ -320,6 +327,7 @@ class MainWindow(QMainWindow):
         self._file_server_panel = FileServerPanel(
             file_servers=self._fileservs,
             attacker_ip_getter=lambda: self._network.attacker_ip(),
+            serving_dir=self._exam.tools_dir,
             parent=self,
         )
         self._dock_fs = self._make_dock(
@@ -531,6 +539,13 @@ class MainWindow(QMainWindow):
 
         m_file.addSeparator()
 
+        act_exam_dir = QAction("Dossier examen...", self)
+        act_exam_dir.setToolTip("Choisir ou creer le dossier oscp-exam utilise pour scans, loot, notes et screenshots")
+        act_exam_dir.triggered.connect(self._configure_exam_workspace)
+        m_file.addAction(act_exam_dir)
+
+        m_file.addSeparator()
+
         # ----- Notes -----
         # Note: pas de setShortcut ici (Ambiguous shortcut overload Ctrl+N).
         # La toolbar action act_note a deja le shortcut.
@@ -681,6 +696,7 @@ class MainWindow(QMainWindow):
         worker = self._terminals.spawn(
             command=command,
             cwd=cwd,
+            env=self._terminal_env(),
             terminal_name=title,
         )
         tab = TerminalTab(
@@ -714,6 +730,12 @@ class MainWindow(QMainWindow):
         tab._finished_slot = _finished_slot   # type: ignore[attr-defined]
         tab.focus_input()
         return tab
+
+    def _terminal_env(self) -> Dict[str, str]:
+        env = os.environ.copy()
+        env.update(self._env.resolved_vars())
+        env.update(self._exam.env_exports())
+        return env
 
     def _mark_tab_finished(self, tab: TerminalTab, exit_code: int) -> None:
         """Grise l'onglet d'un terminal dont le process est termine.
@@ -879,15 +901,12 @@ class MainWindow(QMainWindow):
             return
 
         if template_index < 0 or template_index >= len(tool.templates):
-            # Prompt : demander quel template
-            items = [f"[{i+1}] {t}" for i, t in enumerate(tool.templates)]
-            choice, ok = QInputDialog.getItem(
-                self, f"Template - {tool.name}",
-                "Choisir un template :", items, 0, False,
-            )
-            if not ok:
+            dlg = TemplatePickerDialog(tool.name, tool.templates, parent=self)
+            if dlg.exec_() != dlg.Accepted:
                 return
-            template_index = items.index(choice)
+            template_index = dlg.selected_index()
+            if template_index < 0:
+                return
 
         template = tool.templates[template_index]
         placeholders = tool.extract_placeholders(template)
@@ -1304,6 +1323,37 @@ class MainWindow(QMainWindow):
             info_box(self, "Export OK", f"Exporté vers :\n{path}")
         except Exception as exc:
             error_box(self, "Export échoué", str(exc))
+
+    def _configure_exam_workspace(self) -> None:
+        current = str(self._exam.root)
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "Choisir le dossier d'examen",
+            current,
+        )
+        if not path:
+            return
+        try:
+            root = self._exam.set_root(path)
+            set_screenshot_dir(self._exam.screenshots_dir)
+            self._notes.set_notes_dir(self._exam.notes_dir)
+            self._notes.screenshots_dir = self._exam.screenshots_dir
+            if hasattr(self, "_notes_panel"):
+                self._notes_panel._refresh_list()
+            if hasattr(self, "_file_server_panel"):
+                self._file_server_panel._serving_dir = self._exam.tools_dir
+                self._exam.tools_dir.mkdir(parents=True, exist_ok=True)
+                self._file_server_panel._refresh_table()
+            self.statusBar().showMessage(f"Dossier examen actif : {root}", 5000)
+            info_box(
+                self,
+                "Dossier examen",
+                "Structure prete :\n"
+                f"{root}\n\n"
+                "Les nouvelles notes, captures et outils servis utiliseront ce dossier.",
+            )
+        except Exception as exc:
+            error_box(self, "Dossier examen", str(exc))
 
     # ==============================================================
     # Dialogs "Quick actions"
@@ -1799,7 +1849,11 @@ class MainWindow(QMainWindow):
         if active_note:
             title = f"OSCP - {active_note.name}"
 
-        self._ext_term.launch(title=title, backend="auto")
+        self._ext_term.launch(
+            title=title,
+            backend="auto",
+            extra_exports=self._exam.env_exports(),
+        )
         self.statusBar().showMessage(f"Terminal externe lance ({available[0]})", 3000)
 
     def _on_exam_expired(self) -> None:
@@ -1838,6 +1892,7 @@ class MainWindow(QMainWindow):
         dlg = TransferDialog(
             attacker_ip=ip,
             file_server_manager=self._fileservs,
+            serving_dir=self._exam.tools_dir,
             parent=self,
         )
         dlg.copy_to_clipboard_requested.connect(self._clipboard.capture)

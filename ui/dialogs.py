@@ -289,6 +289,75 @@ class PlaceholderDialog(QDialog):
 
 
 # --------------------------------------------------------------
+# Template picker
+# --------------------------------------------------------------
+
+class TemplatePickerDialog(QDialog):
+    """Selection rapide d'un template sans QInputDialog bloquant."""
+
+    def __init__(
+        self,
+        tool_name: str,
+        templates: List[str],
+        parent: Optional[QWidget] = None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle(f"Templates - {tool_name}")
+        self.setMinimumSize(760, 360)
+        self._templates = templates
+
+        layout = QVBoxLayout(self)
+        title = QLabel(f"{tool_name} : choisir une commande")
+        title.setObjectName("templatePickerTitle")
+        layout.addWidget(title)
+
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("Filtrer les commandes...")
+        self._search.textChanged.connect(self._refresh)
+        layout.addWidget(self._search)
+
+        self._list = QListWidget()
+        self._list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._list.itemDoubleClicked.connect(lambda _item: self.accept())
+        layout.addWidget(self._list, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self._refresh()
+        if self._list.count():
+            self._list.setCurrentRow(0)
+
+    def _refresh(self) -> None:
+        query = self._search.text().strip().lower()
+        current_index = self.selected_index()
+        self._list.clear()
+        for idx, template in enumerate(self._templates):
+            if query and query not in template.lower():
+                continue
+            item = QListWidgetItem(f"{idx + 1}. {template}")
+            item.setData(Qt.UserRole, idx)
+            item.setToolTip(template)
+            self._list.addItem(item)
+        if self._list.count():
+            row = 0
+            for i in range(self._list.count()):
+                if self._list.item(i).data(Qt.UserRole) == current_index:
+                    row = i
+                    break
+            self._list.setCurrentRow(row)
+
+    def selected_index(self) -> int:
+        item = self._list.currentItem()
+        if item is None:
+            return -1
+        value = item.data(Qt.UserRole)
+        return int(value) if value is not None else -1
+
+
+# --------------------------------------------------------------
 # List edit dialog
 # --------------------------------------------------------------
 
