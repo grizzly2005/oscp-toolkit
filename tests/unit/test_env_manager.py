@@ -53,6 +53,15 @@ def test_session_script_contains_exports(env_manager):
     script.unlink()
 
 
+def test_expand_value_resolves_auto_and_user_vars(env_manager):
+    env_manager.set("LHOST", "10.10.14.5")
+
+    expanded = env_manager.expand_value("$BIN_LIN/privesc/linpeas.sh --host ${LHOST}")
+
+    assert expanded.endswith("/binaries/linux/privesc/linpeas.sh --host 10.10.14.5")
+    assert "$BIN_LIN" not in expanded
+
+
 def test_import_from_scope(env_manager):
     env_manager.import_from_scope(target_ip="192.168.1.100", domain="corp.local")
     assert env_manager.get("TARGET") == "192.168.1.100"

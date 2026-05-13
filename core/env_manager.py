@@ -11,6 +11,7 @@ Philosophie :
 """
 from __future__ import annotations
 
+import re
 import stat
 import tempfile
 import uuid
@@ -63,6 +64,8 @@ _ALIASES = [
     ("cdtk",     "cd $PENTEST_DIR/toolkit"),
 ]
 
+_ENV_TOKEN_RE = re.compile(r"\$(\w+)|\$\{(\w+)\}|%(\w+)%")
+
 
 class EnvManager(QObject):
     """Gere les variables d'env injectees dans les terminaux externes."""
@@ -91,6 +94,21 @@ class EnvManager(QObject):
 
     def all(self) -> Dict[str, str]:
         return dict(self._vars)
+
+    def resolved_vars(self) -> Dict[str, str]:
+        merged = dict(_AUTO_VARS)
+        merged.update({k: v for k, v in self._vars.items() if v})
+        return merged
+
+    def expand_value(self, value: str) -> str:
+        """Expand toolkit variables such as $BIN_LIN and ${LHOST}."""
+        vars_ = self.resolved_vars()
+
+        def repl(match: re.Match) -> str:
+            key = match.group(1) or match.group(2) or match.group(3) or ""
+            return vars_.get(key, match.group(0))
+
+        return _ENV_TOKEN_RE.sub(repl, value)
 
     def get(self, key: str, default: str = "") -> str:
         return self._vars.get(key, default)
@@ -144,8 +162,7 @@ class EnvManager(QObject):
 
     def write_session_script(self, extra_exports: Optional[Dict[str, str]] = None) -> Path:
         """Ecrit /tmp/oscp_session_<uuid>.sh et retourne le chemin."""
-        merged = dict(_AUTO_VARS)
-        merged.update({k: v for k, v in self._vars.items() if v})
+        merged = self.resolved_vars()
         if extra_exports:
             merged.update(extra_exports)
 
