@@ -7,6 +7,11 @@
     "USER": "",
     "PASS": "",
     "HASH": "",
-    "IFACE": "tun0"
+    "IFACE": "tun0",
+    "LIGOLO_IFACE": "ligolol2",
+    "LIGOLO_PORT": "11601",
+    "WEB_WORDLIST": "/opt/SecLists/Discovery/Web-Content/common.txt",
+    "VHOST_WORDLIST": "/opt/SecLists/Discovery/DNS/subdomains-top1million-5000.txt",
+    "DNS_WORDLIST": "/opt/SecLists/Discovery/DNS/subdomains-top1million-5000.txt"
   }
 }

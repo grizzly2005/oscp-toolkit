@@ -67,3 +67,11 @@ def test_real_bash_prompt():
 def test_bell_stripped():
     raw = "beep\x07end"
     assert _clean(raw) == "beepend"
+
+
+def test_compact_progress_updates_keeps_last_carriage_return_state():
+    from ui.terminal_tab import _compact_progress_updates
+
+    raw = "Progress 1%\rProgress 50%\rProgress 100%\nfound /admin\n"
+
+    assert _compact_progress_updates(raw) == "Progress 100%\nfound /admin\n"

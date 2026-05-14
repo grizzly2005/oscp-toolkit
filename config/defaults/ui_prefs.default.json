@@ -3,5 +3,9 @@
   "theme": "dark",
   "hidpi_scale": 1.0,
   "terminal_font_pt": 10,
-  "show_exam_timer": true
+  "show_exam_timer": true,
+  "visual_density": "compact",
+  "terminal_fast_render_indicator": true,
+  "reduce_motion": true,
+  "toolbar_style": "compact"
 }

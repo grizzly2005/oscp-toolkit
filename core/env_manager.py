@@ -26,10 +26,29 @@ from .logger import get_logger
 log = get_logger(__name__)
 
 
-DEFAULT_KEYS: List[str] = [
-    "LHOST", "LPORT", "TARGET", "DOMAIN",
-    "USER", "PASS", "HASH", "IFACE",
-]
+DEFAULT_VALUES: Dict[str, str] = {
+    "LHOST": "",
+    "LPORT": "4444",
+    "TARGET": "",
+    "DOMAIN": "",
+    "USER": "",
+    "PASS": "",
+    "HASH": "",
+    "IFACE": "tun0",
+    "LIGOLO_IFACE": "ligolol2",
+    "LIGOLO_PORT": "11601",
+    "WEB_WORDLIST": "/opt/SecLists/Discovery/Web-Content/common.txt",
+    "VHOST_WORDLIST": "/opt/SecLists/Discovery/DNS/subdomains-top1million-5000.txt",
+    "DNS_WORDLIST": "/opt/SecLists/Discovery/DNS/subdomains-top1million-5000.txt",
+}
+
+_LEGACY_DEFAULT_VALUES: Dict[str, str] = {
+    "WEB_WORDLIST": "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt",
+    "VHOST_WORDLIST": "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt",
+    "DNS_WORDLIST": "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt",
+}
+
+DEFAULT_KEYS: List[str] = list(DEFAULT_VALUES)
 
 # Variables auto-injectees dans le shell des terminaux externes.
 #
@@ -83,12 +102,22 @@ class EnvManager(QObject):
     def _load(self) -> None:
         data = self._cm.load("env_vars")
         self._vars = dict(data.get("vars", {}))
-        for k in DEFAULT_KEYS:
-            self._vars.setdefault(k, "")
+        for k, v in DEFAULT_VALUES.items():
+            self._vars.setdefault(k, v)
+        if self._migrate_legacy_defaults():
+            self._save()
         log.info("EnvManager loaded: %d vars", len(self._vars))
 
     def _save(self) -> None:
         self._cm.save("env_vars", {"vars": dict(self._vars)})
+
+    def _migrate_legacy_defaults(self) -> bool:
+        changed = False
+        for key, old_value in _LEGACY_DEFAULT_VALUES.items():
+            if self._vars.get(key) == old_value:
+                self._vars[key] = DEFAULT_VALUES[key]
+                changed = True
+        return changed
 
     # -- API -----------------------------------------------------------------
 
@@ -136,8 +165,8 @@ class EnvManager(QObject):
     def reset_to_defaults(self) -> None:
         data = self._cm.reset("env_vars")
         self._vars = dict(data.get("vars", {}))
-        for k in DEFAULT_KEYS:
-            self._vars.setdefault(k, "")
+        for k, v in DEFAULT_VALUES.items():
+            self._vars.setdefault(k, v)
         self.changed.emit()
 
     def import_from_scope(self, target_ip: str = "", domain: str = "") -> None:

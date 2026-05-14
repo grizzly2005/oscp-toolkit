@@ -42,6 +42,10 @@ class PlaceholderDialog(QDialog):
     # (IPs et hostnames du scope). Ces cles sont les noms typiquement
     # utilises dans les templates d'outils.
     TARGET_KEYS = ("IP", "RHOST", "TARGET", "HOST", "HOSTS", "RANGE", "SUBNET", "CIDR")
+    WORDLIST_KEYS = (
+        "WORDLIST", "WEB_WORDLIST", "VHOST_WORDLIST", "DNS_WORDLIST",
+        "USERLIST", "PASSLIST",
+    )
 
     def __init__(
         self,
@@ -58,6 +62,8 @@ class PlaceholderDialog(QDialog):
         self.setMinimumWidth(820)
         self._fields: Dict[str, QWidget] = {}    # peut etre QLineEdit OU QComboBox
         self._template = template
+        self._command_touched = False
+        self._updating_preview = False
         defaults = defaults or {}
         suggestions = suggestions or {}
         scope_machines = scope_machines or []
@@ -107,6 +113,10 @@ class PlaceholderDialog(QDialog):
                             break
                 elif default:
                     combo.setEditText(default)
+                elif combo.count():
+                    combo.setCurrentIndex(0)
+                    data = combo.itemData(0)
+                    combo.setEditText(data if data is not None else combo.currentText())
                 else:
                     combo.setEditText("")
 
@@ -126,20 +136,30 @@ class PlaceholderDialog(QDialog):
                 form.addRow(f"{{{{{full_key}}}}}", edit)
         layout.addLayout(form)
 
-        # Preview live
+        # Commande finale modifiable. Tant que l'utilisateur ne touche pas ce
+        # champ, elle se recalcule avec les placeholders.
         self._live_preview = QPlainTextEdit()
-        self._live_preview.setReadOnly(True)
-        self._live_preview.setMaximumHeight(110)
+        self._live_preview.setReadOnly(False)
+        self._live_preview.setMaximumHeight(130)
         self._live_preview.setFont(f)
-        layout.addWidget(QLabel("Resultat :"))
+
+        result_header = QHBoxLayout()
+        result_header.addWidget(QLabel("Commande finale :"))
+        result_header.addStretch(1)
+        reset_btn = QPushButton("Recalculer")
+        reset_btn.setToolTip("Recalculer la commande depuis les champs du template")
+        reset_btn.clicked.connect(self._reset_command_from_fields)
+        result_header.addWidget(reset_btn)
+        layout.addLayout(result_header)
         layout.addWidget(self._live_preview)
+        self._live_preview.textChanged.connect(self._on_command_edited)
 
         # Wire signals
         for w in self._fields.values():
             if isinstance(w, QComboBox):
-                w.editTextChanged.connect(self._update_preview)
+                w.editTextChanged.connect(lambda _text: self._update_preview())
             else:
-                w.textChanged.connect(self._update_preview)
+                w.textChanged.connect(lambda _text: self._update_preview())
         self._update_preview()
 
         # Buttons
@@ -273,19 +293,55 @@ class PlaceholderDialog(QDialog):
             return widget.currentText()
         return widget.text() if isinstance(widget, QLineEdit) else ""
 
-    def _update_preview(self) -> None:
+    def _on_command_edited(self) -> None:
+        if not self._updating_preview:
+            self._command_touched = True
+
+    def _reset_command_from_fields(self) -> None:
+        self._command_touched = False
+        self._update_preview(force=True)
+
+    def _update_preview(self, force: bool = False) -> None:
+        if self._command_touched and not force:
+            return
         result = self._template
         for full_key, widget in self._fields.items():
             value = self._value_of(widget)
             placeholder_exact = "{{" + full_key + "}}"
             result = result.replace(placeholder_exact, value)
+        self._updating_preview = True
         self._live_preview.setPlainText(result)
+        self._updating_preview = False
 
     def values(self) -> Dict[str, str]:
         return {k: self._value_of(w) for k, w in self._fields.items()}
 
     def resolved_command(self) -> str:
         return self._live_preview.toPlainText()
+
+
+class CommandEditDialog(QDialog):
+    """Derniere edition d'une commande avant lancement."""
+
+    def __init__(self, tool_name: str, command: str, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Lancer {tool_name}")
+        self.setMinimumWidth(820)
+        layout = QVBoxLayout(self)
+
+        layout.addWidget(QLabel("Commande finale :"))
+        self._edit = QPlainTextEdit(command)
+        self._edit.setFont(QFont("Monospace"))
+        self._edit.setMaximumHeight(150)
+        layout.addWidget(self._edit)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def command(self) -> str:
+        return self._edit.toPlainText().strip()
 
 
 # --------------------------------------------------------------

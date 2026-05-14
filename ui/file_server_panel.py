@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
 
 from core.file_server import DEFAULT_SERVING_DIR, FileServerManager
 from core.logger import get_logger
-from .widgets import SafeButton
+from .widgets import SafeButton, frozen_updates
 
 log = get_logger(__name__)
 
@@ -59,6 +59,8 @@ class FileServerPanel(QWidget):
         self._get_ip = attacker_ip_getter
         self._serving_dir = Path(serving_dir) if serving_dir else SERVING_DIR
         self._pulse_on = False
+        self._closing = False
+        self._flash_restore: Optional[tuple[str, str]] = None
         self.setObjectName("fileServerPanel")
         self._install_local_style()
 
@@ -166,6 +168,13 @@ class FileServerPanel(QWidget):
         actions.addStretch()
         root.addLayout(actions)
 
+        self._pulse_timer = QTimer(self)
+        self._pulse_timer.setInterval(650)
+        self._pulse_timer.timeout.connect(self._pulse_status)
+        self._flash_timer = QTimer(self)
+        self._flash_timer.setSingleShot(True)
+        self._flash_timer.timeout.connect(self._restore_flash_status)
+
         # Refresh state
         self._refresh_table()
 
@@ -173,11 +182,6 @@ class FileServerPanel(QWidget):
         self._fs.shares_changed.connect(self._refresh_status)
         self._sync_snippet_buttons()
         self._refresh_status()
-
-        self._pulse_timer = QTimer(self)
-        self._pulse_timer.setInterval(650)
-        self._pulse_timer.timeout.connect(self._pulse_status)
-        self._pulse_timer.start()
 
     # -- Public API ---------------------------------------------------------
 
@@ -341,6 +345,8 @@ class FileServerPanel(QWidget):
     def _refresh_status(self) -> None:
         self._sync_current_share()
         if self._current_share:
+            if not self._pulse_timer.isActive():
+                self._pulse_timer.start()
             ip = self._get_ip() or "LHOST"
             self._status_lbl.setText(
                 f"[OK] http://{ip}:{self._current_share.port}/ "
@@ -348,6 +354,7 @@ class FileServerPanel(QWidget):
             )
             self._status_lbl.setStyleSheet("color:#81c784;")
         else:
+            self._pulse_timer.stop()
             self._status_lbl.setText("[-] serveur arrete")
             self._status_lbl.setStyleSheet("color:#9e9e9e;")
         self._reset_drop_style()
@@ -367,17 +374,18 @@ class FileServerPanel(QWidget):
     def _refresh_table(self) -> None:
         self._sync_current_share()
         files = sorted([p for p in self._serving_dir.glob("*") if p.is_file()])
-        self._table.setRowCount(len(files))
         ip = self._get_ip() or "LHOST"
         port = self._current_share.port if self._current_share else self._port_spin.value()
-        for row, p in enumerate(files):
-            name_item = QTableWidgetItem(p.name)
-            self._table.setItem(row, 0, name_item)
-            size_item = QTableWidgetItem(_sizeof_fmt(p.stat().st_size))
-            self._table.setItem(row, 1, size_item)
-            url = f"http://{ip}:{port}/{p.name}"
-            url_item = QTableWidgetItem(url)
-            self._table.setItem(row, 2, url_item)
+        with frozen_updates(self._table):
+            self._table.setRowCount(len(files))
+            for row, p in enumerate(files):
+                name_item = QTableWidgetItem(p.name)
+                self._table.setItem(row, 0, name_item)
+                size_item = QTableWidgetItem(_sizeof_fmt(p.stat().st_size))
+                self._table.setItem(row, 1, size_item)
+                url = f"http://{ip}:{port}/{p.name}"
+                url_item = QTableWidgetItem(url)
+                self._table.setItem(row, 2, url_item)
         self._sync_snippet_buttons()
 
     def _select_file(self, filename: str) -> None:
@@ -464,19 +472,26 @@ class FileServerPanel(QWidget):
         self._flash_status("Copie dans le presse-papier", "#4fc3f7")
 
     def _flash_status(self, text: str, color: str) -> None:
+        if self._closing:
+            return
         old_text = self._status_lbl.text()
         old_style = self._status_lbl.styleSheet()
+        self._flash_restore = (old_text, old_style)
         self._status_lbl.setText(text)
         self._status_lbl.setStyleSheet(f"color:{color}; font-weight:bold;")
-        QTimer.singleShot(1200, lambda: self._restore_status(old_text, old_style))
+        self._flash_timer.start(900)
 
-    def _restore_status(self, text: str, style: str) -> None:
+    def _restore_flash_status(self) -> None:
+        if not self._flash_restore:
+            return
+        text, style = self._flash_restore
+        self._flash_restore = None
         if "Copie" in self._status_lbl.text():
             self._status_lbl.setText(text)
             self._status_lbl.setStyleSheet(style)
 
     def _pulse_status(self) -> None:
-        if not hasattr(self, "_status_dot"):
+        if self._closing or not hasattr(self, "_status_dot"):
             return
         if not self._current_share:
             self._status_dot.setStyleSheet(
@@ -492,6 +507,12 @@ class FileServerPanel(QWidget):
             "border: 1px solid #b9f6ca;"
             "}"
         )
+
+    def closeEvent(self, event) -> None:
+        self._closing = True
+        self._pulse_timer.stop()
+        self._flash_timer.stop()
+        super().closeEvent(event)
 
     def _open_serving_dir(self) -> None:
         # Subprocess detache pour eviter que le file manager pollue notre stderr

@@ -2,39 +2,71 @@
   "wordlists": [
     {
       "name": "rockyou.txt",
-      "path": "/usr/share/wordlists/rockyou.txt",
+      "path": "/opt/SecLists/Passwords/Leaked-Databases/rockyou.txt.tar.gz",
       "category": "passwords",
-      "description": "Le grand classique (compressé en .gz par défaut sur Kali)",
+      "description": "Rockyou dans SecLists (archive)",
       "size_bytes": 0,
       "lines": 0
     },
     {
-      "name": "common.txt (dirb)",
-      "path": "/usr/share/wordlists/dirb/common.txt",
+      "name": "SecLists web common",
+      "path": "/opt/SecLists/Discovery/Web-Content/common.txt",
       "category": "web-directories",
-      "description": "Liste de répertoires web communs",
+      "description": "Web content rapide et fiable",
       "size_bytes": 0,
       "lines": 0
     },
     {
-      "name": "directory-list-2.3-medium",
-      "path": "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt",
+      "name": "SecLists DirBuster medium",
+      "path": "/opt/SecLists/Discovery/Web-Content/DirBuster-2007_directory-list-2.3-medium.txt",
       "category": "web-directories",
-      "description": "Dirbuster medium",
+      "description": "DirBuster 2.3 medium",
+      "size_bytes": 0,
+      "lines": 0
+    },
+    {
+      "name": "SecLists raft small dirs",
+      "path": "/opt/SecLists/Discovery/Web-Content/raft-small-directories.txt",
+      "category": "web-directories",
+      "description": "Repertoires web small",
+      "size_bytes": 0,
+      "lines": 0
+    },
+    {
+      "name": "SecLists subdomains top 5000",
+      "path": "/opt/SecLists/Discovery/DNS/subdomains-top1million-5000.txt",
+      "category": "dns",
+      "description": "SecLists DNS/vhost shortlist",
       "size_bytes": 0,
       "lines": 0
     },
     {
       "name": "SecLists Top 1000 Passwords",
-      "path": "/usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt",
+      "path": "/opt/SecLists/Passwords/Common-Credentials/xato-net-10-million-passwords-1000.txt",
       "category": "passwords",
       "description": "Top 1000 mots de passe SecLists",
       "size_bytes": 0,
       "lines": 0
     },
     {
+      "name": "SecLists Top 10000 Passwords",
+      "path": "/opt/SecLists/Passwords/Common-Credentials/xato-net-10-million-passwords-10000.txt",
+      "category": "passwords",
+      "description": "Top 10000 mots de passe SecLists",
+      "size_bytes": 0,
+      "lines": 0
+    },
+    {
+      "name": "SecLists top usernames shortlist",
+      "path": "/opt/SecLists/Usernames/top-usernames-shortlist.txt",
+      "category": "usernames",
+      "description": "Usernames très communs",
+      "size_bytes": 0,
+      "lines": 0
+    },
+    {
       "name": "names.txt",
-      "path": "/usr/share/seclists/Usernames/Names/names.txt",
+      "path": "/opt/SecLists/Usernames/Names/names.txt",
       "category": "usernames",
       "description": "Liste de prénoms",
       "size_bytes": 0,

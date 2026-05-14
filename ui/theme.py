@@ -4,14 +4,14 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import QApplication
 
-_BG          = QColor("#1e1e1e")
-_BG_ALT      = QColor("#252526")
-_BG_DARKER   = QColor("#181818")
-_FG          = QColor("#d4d4d4")
-_FG_DIM      = QColor("#9e9e9e")
-_BORDER      = QColor("#333333")
-_ACCENT      = QColor("#4fc3f7")
-_ACCENT_DARK = QColor("#0288d1")
+_BG          = QColor("#111318")
+_BG_ALT      = QColor("#161a22")
+_BG_DARKER   = QColor("#0d1117")
+_FG          = QColor("#e6edf3")
+_FG_DIM      = QColor("#8b949e")
+_BORDER      = QColor("#30363d")
+_ACCENT      = QColor("#58a6ff")
+_ACCENT_DARK = QColor("#1f6feb")
 _WARN        = QColor("#ffb74d")
 _ERROR       = QColor("#ef5350")
 _OK          = QColor("#81c784")
@@ -53,7 +53,8 @@ def apply_dark_theme(app: QApplication) -> None:
             font-family: "Segoe UI", "Noto Sans", "Cantarell", sans-serif;
             font-size: 10pt;
         }
-        QMainWindow, QDialog { background: #1e1e1e; }
+        QMainWindow, QDialog { background: #111318; }
+        QMainWindow#OSCPToolkitMain { background: #111318; }
 
         /* ── Boutons ─────────────────────────────────────────── */
         /*
@@ -137,10 +138,13 @@ def apply_dark_theme(app: QApplication) -> None:
             background: #0288d1;
             color: white;
         }
-        QListWidget::item:hover, QTreeWidget::item:hover {
+        QListWidget::item:hover, QTreeWidget::item:hover,
+        QTableWidget::item:hover {
             background: #2a2a2d;
         }
-        QTreeWidget::item, QListWidget::item { padding: 2px 0; }
+        QTreeWidget::item, QListWidget::item { padding: 3px 4px; }
+        QTableWidget { gridline-color: #2a2a2d; }
+        QTableWidget::item { padding: 2px 4px; }
 
         QHeaderView::section {
             background: #252526;
@@ -180,11 +184,17 @@ def apply_dark_theme(app: QApplication) -> None:
         }
 
         /* ── Toolbar / Menu ──────────────────────────────────── */
-        QToolBar { background: #252526; border: 0; spacing: 4px; padding: 3px; }
-        QToolBar::separator { width: 1px; background: #3e3e42; margin: 3px 2px; }
-        QMenuBar { background: #252526; color: #d4d4d4; }
+        QToolBar {
+            background: #0d1117;
+            border: 0;
+            border-bottom: 1px solid #30363d;
+            spacing: 3px;
+            padding: 5px 4px;
+        }
+        QToolBar::separator { width: 1px; background: #30363d; margin: 3px 3px; }
+        QMenuBar { background: #0d1117; color: #e6edf3; }
         QMenuBar::item:selected { background: #0288d1; color: white; }
-        QMenu { background: #252526; border: 1px solid #333; color: #d4d4d4; }
+        QMenu { background: #161a22; border: 1px solid #30363d; color: #e6edf3; }
         QMenu::item { padding: 5px 20px 5px 12px; }
         QMenu::item:selected { background: #0288d1; color: white; }
         QMenu::separator { height: 1px; background: #333; margin: 4px 8px; }
@@ -193,37 +203,39 @@ def apply_dark_theme(app: QApplication) -> None:
         /* (1) Boutons "primary" : actions de creation principales        *
          *     -> bleu nuance, fond legerement plus clair                 */
         QToolBar QToolButton#toolbar_primary {
-            background: #2c4a5e;
-            color: #eceff1;
-            border: 1px solid #3a5e75;
+            background: #17324d;
+            color: #e6f6ff;
+            border: 1px solid #2f81f7;
             border-radius: 3px;
-            padding: 4px 10px;
-            margin: 1px 2px;
+            padding: 3px 8px;
+            margin: 1px;
             min-height: 22px;
+            min-width: 42px;
         }
         QToolBar QToolButton#toolbar_primary:hover {
-            background: #365d77;
-            border-color: #4fc3f7;
+            background: #1f4f78;
+            border-color: #58a6ff;
         }
         QToolBar QToolButton#toolbar_primary:pressed {
-            background: #4fc3f7;
-            color: #1e1e1e;
+            background: #58a6ff;
+            color: #0d1117;
         }
 
         /* (2) Boutons "util" : actions secondaires (Encoder, Hash, etc.) *
          *     -> gris fonce, simple, neutre                              */
         QToolBar QToolButton#toolbar_util {
-            background: #3a3a3d;
-            color: #d4d4d4;
-            border: 1px solid #4a4a4d;
+            background: #21262d;
+            color: #e6edf3;
+            border: 1px solid #30363d;
             border-radius: 3px;
-            padding: 4px 10px;
-            margin: 1px 2px;
+            padding: 3px 8px;
+            margin: 1px;
             min-height: 22px;
+            min-width: 36px;
         }
         QToolBar QToolButton#toolbar_util:hover {
-            background: #45454a;
-            border-color: #5a5a5e;
+            background: #30363d;
+            border-color: #8b949e;
         }
         QToolBar QToolButton#toolbar_util:pressed {
             background: #5a5a5e;
@@ -235,7 +247,11 @@ def apply_dark_theme(app: QApplication) -> None:
         }
 
         /* ── Barre de statut ─────────────────────────────────── */
-        QStatusBar { background: #263238; color: #eceff1; }
+        QStatusBar {
+            background: #0d1117;
+            color: #e6edf3;
+            border-top: 1px solid #30363d;
+        }
 
         /* ── Scrollbars ──────────────────────────────────────── */
         QScrollBar:vertical {
@@ -258,11 +274,25 @@ def apply_dark_theme(app: QApplication) -> None:
         QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 
         /* ── Dock ────────────────────────────────────────────── */
-        QDockWidget { color: #d4d4d4; }
+        QDockWidget { color: #e6edf3; }
         QDockWidget::title {
-            text-align: left; background: #252526;
-            padding: 5px 8px; border-bottom: 1px solid #333;
+            text-align: left;
+            background: #161a22;
+            padding: 6px 8px;
+            border-bottom: 1px solid #30363d;
+            color: #e6edf3;
+            font-weight: bold;
         }
+        QDockWidget#dock_tools::title { border-left: 4px solid #58a6ff; }
+        QDockWidget#dock_scope::title { border-left: 4px solid #7ee787; }
+        QDockWidget#dock_notes::title { border-left: 4px solid #d2a8ff; }
+        QDockWidget#dock_creds::title { border-left: 4px solid #ffa657; }
+        QDockWidget#dock_docs::title { border-left: 4px solid #a5d6ff; }
+        QDockWidget#dock_clipboard::title { border-left: 4px solid #f2cc60; }
+        QDockWidget#dock_history::title { border-left: 4px solid #8b949e; }
+        QDockWidget#dock_targets::title { border-left: 4px solid #ff7b72; }
+        QDockWidget#dock_wordlists::title { border-left: 4px solid #f2cc60; }
+        QDockWidget#dock_file_server::title { border-left: 4px solid #7ee787; }
         QDockWidget::close-button, QDockWidget::float-button {
             border: none; background: transparent; padding: 2px;
             icon-size: 14px;
@@ -286,10 +316,10 @@ def apply_dark_theme(app: QApplication) -> None:
         QToolBar QToolButton#service_ligolo {
             background: #2d2d30;
             color: #ffb74d;
-            border: 2px solid #ff9800;
+            border: 1px solid #ff9800;
             border-radius: 4px;
             padding: 3px 10px;
-            margin: 1px 2px;
+            margin: 1px;
             min-height: 22px;
             font-weight: bold;
         }
@@ -310,7 +340,7 @@ def apply_dark_theme(app: QApplication) -> None:
         QToolBar QToolButton#service_ligolo:checked {
             background: #ff9800;
             color: #1e1e1e;
-            border: 2px solid #ffa726;
+            border: 1px solid #ffa726;
         }
         QToolBar QToolButton#service_ligolo:checked:hover {
             background: #ffa726;
@@ -323,6 +353,67 @@ def apply_dark_theme(app: QApplication) -> None:
         QSplitter::handle:horizontal { width: 3px; }
         QSplitter::handle:vertical  { height: 3px; }
         QSplitter::handle:hover { background: #4fc3f7; }
+
+        /* ── Accueil compact OSCP ───────────────────────────── */
+        QWidget#welcomePage {
+            background: #111318;
+        }
+        QWidget#welcomePage QLabel#welcomeTitle {
+            color: #f3f4f6;
+        }
+        QWidget#welcomePage QLabel#welcomeSubtitle {
+            color: #9e9e9e;
+            font-size: 10pt;
+        }
+        QWidget#welcomePage QLabel#welcomeHint {
+            color: #6f7680;
+            font-size: 9pt;
+        }
+        QWidget#welcomePage QLabel#welcomePill {
+            background: #161a22;
+            color: #e6edf3;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-weight: bold;
+        }
+        QPushButton#welcome_primary {
+            background: #263847;
+            border-color: #35566d;
+            color: #e6f6ff;
+            font-weight: bold;
+        }
+        QPushButton#welcome_primary:hover {
+            background: #2f4a5e;
+            border-color: #4fc3f7;
+        }
+        QPushButton#welcome_service {
+            background: #332719;
+            border-color: #8a5a16;
+            color: #ffd89a;
+            font-weight: bold;
+        }
+        QPushButton#welcome_service:hover {
+            background: #47351d;
+            border-color: #ffb74d;
+        }
+        QPushButton#welcome_util {
+            background: #263b2c;
+            border-color: #3d6b48;
+            color: #dff5e3;
+            font-weight: bold;
+        }
+
+        /* ── Terminal ───────────────────────────────────────── */
+        QLabel#terminalFastBadge {
+            background: #263b2c;
+            color: #81c784;
+            border: 1px solid #3d6b48;
+            border-radius: 3px;
+            padding: 1px 4px;
+            font-size: 8pt;
+            font-weight: bold;
+        }
 
         /* ── ComboBox ────────────────────────────────────────── */
         QComboBox {

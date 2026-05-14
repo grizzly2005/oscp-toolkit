@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
 )
 
 from core.command_history import CommandHistory, HistoryEntry
+from .widgets import frozen_updates
 
 
 class HistoryPanel(QWidget):
@@ -78,31 +79,33 @@ class HistoryPanel(QWidget):
 
         entries = self._h.search(query=q, tool=tool, machine=machine)
 
-        self._table.setRowCount(0)
-        # Les plus récents en premier (déjà le cas avec search)
-        for e in entries[:1000]:      # safety
-            row = self._table.rowCount()
-            self._table.insertRow(row)
+        with frozen_updates(self._table):
+            self._table.setRowCount(0)
+            # Les plus récents en premier (déjà le cas avec search)
+            for e in entries[:1000]:      # safety
+                row = self._table.rowCount()
+                self._table.insertRow(row)
 
-            ts = time.strftime("%m-%d %H:%M:%S", time.localtime(e.ts))
-            self._table.setItem(row, 0, QTableWidgetItem(ts))
-            self._table.setItem(row, 1, QTableWidgetItem(e.terminal or "-"))
-            self._table.setItem(row, 2, QTableWidgetItem(e.tool or "-"))
-            self._table.setItem(row, 3, QTableWidgetItem(e.machine or "-"))
+                ts = time.strftime("%m-%d %H:%M:%S", time.localtime(e.ts))
+                self._table.setItem(row, 0, QTableWidgetItem(ts))
+                self._table.setItem(row, 1, QTableWidgetItem(e.terminal or "-"))
+                self._table.setItem(row, 2, QTableWidgetItem(e.tool or "-"))
+                self._table.setItem(row, 3, QTableWidgetItem(e.machine or "-"))
 
-            cmd_item = QTableWidgetItem(e.command)
-            cmd_item.setFont(QFont("Monospace", 9))
-            if e.exit_code is not None and e.exit_code != 0:
-                cmd_item.setForeground(QColor("#ef5350"))
-            self._table.setItem(row, 4, cmd_item)
+                cmd_item = QTableWidgetItem(e.command)
+                cmd_item.setFont(QFont("Monospace", 9))
+                if e.exit_code is not None and e.exit_code != 0:
+                    cmd_item.setForeground(QColor("#ef5350"))
+                self._table.setItem(row, 4, cmd_item)
 
-            # Stock ref de l'entry sur la cellule 0
-            self._table.item(row, 0).setData(Qt.UserRole, e)
+                # Stock ref de l'entry sur la cellule 0
+                self._table.item(row, 0).setData(Qt.UserRole, e)
 
-        self._table.resizeColumnToContents(0)
-        self._table.resizeColumnToContents(1)
-        self._table.resizeColumnToContents(2)
-        self._table.resizeColumnToContents(3)
+            if self._table.rowCount() < 250:
+                self._table.resizeColumnToContents(0)
+                self._table.resizeColumnToContents(1)
+                self._table.resizeColumnToContents(2)
+                self._table.resizeColumnToContents(3)
 
     def _selected_entry(self) -> Optional[HistoryEntry]:
         row = self._table.currentRow()

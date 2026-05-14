@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
     QAbstractItemView, QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem,
     QPushButton, QSplitter, QTextBrowser, QVBoxLayout, QWidget, QLabel,
 )
+from .widgets import frozen_updates
 
 
 class DocPanel(QWidget):
@@ -114,22 +115,23 @@ class DocPanel(QWidget):
 
     def _refresh_list(self) -> None:
         query = self._search.text().strip().lower()
-        self._list.clear()
         files = sorted(self.cheats_dir.rglob("*.md"))
         shown = 0
-        for p in files:
-            if query:
-                try:
-                    content = p.read_text(encoding="utf-8", errors="replace")
-                except OSError:
-                    content = ""
-                if query not in content.lower() and query not in p.stem.lower():
-                    continue
-            rel = p.relative_to(self.cheats_dir)
-            item = QListWidgetItem(str(rel))
-            item.setData(Qt.UserRole, str(p))
-            self._list.addItem(item)
-            shown += 1
+        with frozen_updates(self._list):
+            self._list.clear()
+            for p in files:
+                if query:
+                    try:
+                        content = p.read_text(encoding="utf-8", errors="replace")
+                    except OSError:
+                        content = ""
+                    if query not in content.lower() and query not in p.stem.lower():
+                        continue
+                rel = p.relative_to(self.cheats_dir)
+                item = QListWidgetItem(str(rel))
+                item.setData(Qt.UserRole, str(p))
+                self._list.addItem(item)
+                shown += 1
         self._heading.setText(f"Cheatsheets ({shown}/{len(files)})")
         if shown and self._list.currentRow() < 0:
             self._list.setCurrentRow(0)

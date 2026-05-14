@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
 
 from core.notes import Note, NotesManager
 from .dialogs import confirm, error_box, info_box
+from .widgets import frozen_updates
 
 
 class NotesPanel(QWidget):
@@ -163,12 +164,15 @@ class NotesPanel(QWidget):
     def _refresh_list(self) -> None:
         current_name = self._current.name if self._current else None
         self._list.blockSignals(True)
-        self._list.clear()
-        for n in self._nm.all():
-            item = QListWidgetItem(n.name)
-            item.setData(Qt.UserRole, n.name)
-            self._list.addItem(item)
-        self._list.blockSignals(False)
+        try:
+            with frozen_updates(self._list):
+                self._list.clear()
+                for n in self._nm.all():
+                    item = QListWidgetItem(n.name)
+                    item.setData(Qt.UserRole, n.name)
+                    self._list.addItem(item)
+        finally:
+            self._list.blockSignals(False)
 
         if current_name:
             # Reselect

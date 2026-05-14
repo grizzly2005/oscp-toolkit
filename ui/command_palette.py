@@ -27,12 +27,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
-from PyQt5.QtCore import Qt, QSize, pyqtSignal
+from PyQt5.QtCore import Qt, QSize, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QKeySequence
 from PyQt5.QtWidgets import (
     QDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QVBoxLayout, QWidget,
 )
+from .widgets import frozen_updates
+
+
+_CATEGORY_ORDER = {
+    "Action": 0,
+    "Outil": 1,
+    "Machine": 2,
+    "Note": 3,
+    "Cred": 4,
+}
 
 
 @dataclass
@@ -92,6 +102,12 @@ class CommandPalette(QDialog):
 
         self._actions: List[PaletteAction] = []
         self._filtered: List[Tuple[int, PaletteAction]] = []
+        self._query_timer = QTimer(self)
+        self._query_timer.setSingleShot(True)
+        self._query_timer.setInterval(60)
+        self._query_timer.timeout.connect(
+            lambda: self._on_query_changed(self._input.text())
+        )
 
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
@@ -113,7 +129,7 @@ class CommandPalette(QDialog):
             "padding:6px; border-radius:3px; color:#eee; }"
             "QLineEdit:focus { border-color:#4fc3f7; }"
         )
-        self._input.textChanged.connect(self._on_query_changed)
+        self._input.textChanged.connect(lambda _text: self._query_timer.start())
         self._input.returnPressed.connect(self._execute_current)
         root.addWidget(self._input)
 
@@ -172,35 +188,39 @@ class CommandPalette(QDialog):
             if sc is not None:
                 scored.append((sc, act))
 
-        scored.sort(key=lambda x: (x[0], x[1].category, x[1].label.lower()))
+        scored.sort(key=lambda x: (
+            x[0],
+            _CATEGORY_ORDER.get(x[1].category, 99),
+            x[1].label.lower(),
+        ))
         if not text:
             # Limite a 50 pour la perf
             scored = scored[:50]
         self._filtered = scored
 
-        self._list.clear()
-        cat_colors = {
-            "Outil":   "#4fc3f7",
-            "Note":    "#81c784",
-            "Cred":    "#ffb74d",
-            "Action":  "#ef5350",
-            "Machine": "#ba68c8",
-        }
-        for _score, act in scored:
-            item = QListWidgetItem()
-            label = act.label
-            cat = act.category
-            color = cat_colors.get(cat, "#9e9e9e")
-            subtitle = f"  <span style='color:#666;'>{act.subtitle}</span>" if act.subtitle else ""
-            # QListWidget ne gere pas le HTML simple via setText,
-            # on met texte brut + colorisation via data
-            item.setText(f"[{cat}]  {label}{('  - ' + act.subtitle) if act.subtitle else ''}")
-            item.setForeground(QColor(color))
-            item.setData(Qt.UserRole, act)
-            self._list.addItem(item)
+        with frozen_updates(self._list):
+            self._list.clear()
+            cat_colors = {
+                "Outil":   "#4fc3f7",
+                "Note":    "#81c784",
+                "Cred":    "#ffb74d",
+                "Action":  "#ef5350",
+                "Machine": "#ba68c8",
+            }
+            for _score, act in scored:
+                item = QListWidgetItem()
+                label = act.label
+                cat = act.category
+                color = cat_colors.get(cat, "#9e9e9e")
+                # QListWidget ne gere pas le HTML simple via setText,
+                # on met texte brut + colorisation via data.
+                item.setText(f"[{cat}]  {label}{('  - ' + act.subtitle) if act.subtitle else ''}")
+                item.setForeground(QColor(color))
+                item.setData(Qt.UserRole, act)
+                self._list.addItem(item)
 
-        if self._list.count() > 0:
-            self._list.setCurrentRow(0)
+            if self._list.count() > 0:
+                self._list.setCurrentRow(0)
 
     # -- Keys ---------------------------------------------------------------
 
@@ -221,6 +241,9 @@ class CommandPalette(QDialog):
         super().keyPressEvent(event)
 
     def _execute_current(self) -> None:
+        if self._query_timer.isActive():
+            self._query_timer.stop()
+            self._on_query_changed(self._input.text())
         item = self._list.currentItem()
         if not item:
             return

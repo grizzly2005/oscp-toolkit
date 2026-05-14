@@ -67,10 +67,12 @@ _ACTIONS: List[SetupAction] = [
     SetupAction(
         key="ligolo-proxy",
         name="Ligolo-ng Proxy",
-        description="Lance le proxy Ligolo-ng (self-cert). Ecoute sur :11601.",
+        description="Lance le proxy Ligolo-ng avec sudo (self-cert). Ecoute sur :11601.",
         command=[
+            "sudo",
             str(_BIN_LIN / "network" / "ligolo" / "ligolo_proxy_lin"),
             "-selfcert",
+            "-laddr", "0.0.0.0:11601",
         ],
         cwd=str(_BIN_LIN / "network" / "ligolo"),
         category="pivot",

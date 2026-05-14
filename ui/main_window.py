@@ -27,7 +27,7 @@ from PyQt5.QtWidgets import (
     QAction, QApplication, QDockWidget, QFileDialog,
     QInputDialog, QMainWindow, QMenu, QMessageBox, QShortcut, QStatusBar,
     QTabWidget, QToolBar, QWidget, QVBoxLayout, QLabel, QTabBar,
-    QPushButton,
+    QHBoxLayout, QPushButton,
 )
 
 from core.config_manager import ConfigManager
@@ -71,7 +71,11 @@ from ui.revshell_dialog import RevshellDialog
 from ui.encoder_dialog import EncoderDialog
 from ui.hash_dialog import HashDialog
 from ui.transfer_dialog import TransferDialog
-from ui.dialogs import PlaceholderDialog, TemplatePickerDialog, confirm, info_box, error_box
+from ui.searchsploit_dialog import SearchSploitDialog
+from ui.dialogs import (
+    CommandEditDialog, PlaceholderDialog, TemplatePickerDialog,
+    confirm, info_box, error_box,
+)
 from ui.env_dialog import EnvDialog
 from ui.exam_timer import ExamTimer
 from ui.find_bar import FindBar
@@ -251,21 +255,67 @@ class MainWindow(QMainWindow):
 
     def _make_welcome_widget(self) -> QWidget:
         w = QWidget()
+        w.setObjectName("welcomePage")
         layout = QVBoxLayout(w)
         layout.setAlignment(Qt.AlignCenter)
+        layout.setSpacing(14)
+
         title = QLabel("OSCP Toolkit")
+        title.setObjectName("welcomeTitle")
         f = title.font(); f.setPointSize(24); f.setBold(True); title.setFont(f)
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
+
         subtitle = QLabel(
-            "<p style='color:#9e9e9e;'>Ctrl+T nouveau terminal &nbsp;·&nbsp; "
-            "Ctrl+N nouvelle note &nbsp;·&nbsp; Ctrl+R reverse shell "
-            "&nbsp;·&nbsp; Ctrl+E encoder &nbsp;·&nbsp; F1 docs</p>"
-            "<p style='color:#ffb74d;'>[!] Metasploit : 1 usage autorisé sur l'examen OSCP</p>"
+            "Workflow rapide OSCP: cible, scan, fuzz, transfert, pivot, proof."
         )
+        subtitle.setObjectName("welcomeSubtitle")
         subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setTextFormat(Qt.RichText)
         layout.addWidget(subtitle)
+
+        context = QHBoxLayout()
+        context.setAlignment(Qt.AlignCenter)
+        context.setSpacing(8)
+        self._welcome_target_lbl = QLabel("Cible: -")
+        self._welcome_target_lbl.setObjectName("welcomePill")
+        self._welcome_ip_lbl = QLabel("LHOST: -")
+        self._welcome_ip_lbl.setObjectName("welcomePill")
+        context.addWidget(self._welcome_target_lbl)
+        context.addWidget(self._welcome_ip_lbl)
+        layout.addLayout(context)
+
+        def add_button(row: QHBoxLayout, text: str, callback, role: str = "util") -> None:
+            btn = QPushButton(text)
+            btn.setObjectName(f"welcome_{role}")
+            btn.setMinimumWidth(112)
+            btn.clicked.connect(callback)
+            row.addWidget(btn)
+
+        row_primary = QHBoxLayout()
+        row_primary.setAlignment(Qt.AlignCenter)
+        row_primary.setSpacing(8)
+        add_button(row_primary, "Terminal", lambda: self.spawn_terminal(), "primary")
+        add_button(row_primary, "Nmap", lambda: self._launch_tool_by_name("nmap"), "primary")
+        add_button(row_primary, "Web fuzz", self._launch_web_fuzzer, "primary")
+        add_button(row_primary, "SearchSploit", self._open_searchsploit_dialog, "primary")
+        layout.addLayout(row_primary)
+
+        row_services = QHBoxLayout()
+        row_services.setAlignment(Qt.AlignCenter)
+        row_services.setSpacing(8)
+        add_button(row_services, "Transfer", self._open_transfer_dialog, "service")
+        add_button(row_services, "Listener", self._quick_listener, "service")
+        add_button(row_services, "HTTP", self._quick_http_server, "service")
+        add_button(row_services, "Ligolo", self._on_ligolo_clicked, "service")
+        add_button(row_services, "Proof", self._quick_screenshot_proof, "util")
+        layout.addLayout(row_services)
+
+        hint = QLabel("Ctrl+P palette  |  F1 docs  |  F2 listener  |  F3 HTTP  |  F4 Ligolo")
+        hint.setObjectName("welcomeHint")
+        hint.setAlignment(Qt.AlignCenter)
+        layout.addWidget(hint)
+
+        self._refresh_welcome_context()
         return w
 
     def _build_docks(self) -> None:
@@ -346,10 +396,11 @@ class MainWindow(QMainWindow):
         self._dock_creds.raise_()
 
         # --- Persistance auto du layout sur deplacement/redimension d'un dock ---
-        # On debounce 1s : pendant un drag, les signaux feu plusieurs fois/sec.
+        # Debounce volontairement plus long: saveState()/ecriture disque peuvent
+        # provoquer un micro-freeze perceptible juste apres un clic de fermeture.
         self._layout_save_timer = QTimer(self)
         self._layout_save_timer.setSingleShot(True)
-        self._layout_save_timer.setInterval(1000)
+        self._layout_save_timer.setInterval(2500)
         self._layout_save_timer.timeout.connect(self._persist_layout)
         # Signaux par dock : float/unfloat, change de zone, masquage/affichage
         for dock in [
@@ -399,19 +450,21 @@ class MainWindow(QMainWindow):
             return btn
 
         # ----- PRIMAIRES (bleu) : actions de creation principales -----
-        act_term = QAction("Terminal", self)
+        act_term = QAction("Term", self)
         act_term.setShortcut(QKeySequence("Ctrl+T"))
+        act_term.setToolTip("Nouveau terminal integre (Ctrl+T)")
         act_term.triggered.connect(lambda: self.spawn_terminal())
         add_action(act_term, "primary")
 
-        act_note = QAction("Nouvelle note", self)
+        act_note = QAction("Note", self)
         act_note.setShortcut(QKeySequence("Ctrl+N"))
+        act_note.setToolTip("Nouvelle note (Ctrl+N)")
         act_note.triggered.connect(self._on_new_note)
         add_action(act_note, "primary")
 
         tb.addSeparator()
 
-        act_rev = QAction("RevShell", self)
+        act_rev = QAction("Shell", self)
         act_rev.setShortcut(QKeySequence("Ctrl+R"))
         act_rev.setToolTip("Ouvre revshells.com dans le navigateur")
         act_rev.triggered.connect(self._open_revshells_web)
@@ -424,7 +477,7 @@ class MainWindow(QMainWindow):
         act_env.triggered.connect(self._open_env_dialog)
         add_action(act_env, "util")
 
-        act_ext_term = QAction("Ext. Terminal", self)
+        act_ext_term = QAction("Ext", self)
         act_ext_term.setShortcut(QKeySequence("Ctrl+Shift+T"))
         act_ext_term.setToolTip("Terminal externe avec env OSCP (wt.exe / xterm)")
         act_ext_term.triggered.connect(self._spawn_external_terminal)
@@ -433,33 +486,29 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
 
         # ----- SERVICES (orange) : Listener / HTTP / Ligolo -----
-        # Ces 3 boutons demarrent un process en arriere-plan.
-        # Ligolo est en mode "toggle" : clic 1 = start, clic 2 = stop.
-        # Clic droit sur Ligolo = configurer la commande.
+        # Listener et HTTP sont rapides; Ligolo s'ouvre dans un terminal pour
+        # garder le prompt sudo et le prompt interactif du proxy visibles.
         self._btn_listener = QToolButton(self)
         self._btn_listener.setObjectName("service_listener")
-        self._btn_listener.setText("Listener (F2)")
+        self._btn_listener.setText("Listen F2")
         self._btn_listener.setToolTip("Lance nc -lvnp sur LPORT dans un terminal integre")
         self._btn_listener.clicked.connect(self._quick_listener)
         tb.addWidget(self._btn_listener)
 
         self._btn_http = QToolButton(self)
         self._btn_http.setObjectName("service_http")
-        self._btn_http.setText("HTTP (F3)")
+        self._btn_http.setText("HTTP F3")
         self._btn_http.setToolTip("Demarre le serveur HTTP du panel File Server")
         self._btn_http.clicked.connect(self._quick_http_server)
         tb.addWidget(self._btn_http)
 
-        # Ligolo en checkable : visualise l'etat ON/OFF
         self._btn_ligolo = QToolButton(self)
         self._btn_ligolo.setObjectName("service_ligolo")
-        self._btn_ligolo.setText("Ligolo (F4)")
-        self._btn_ligolo.setCheckable(True)
+        self._btn_ligolo.setText("Ligolo F4")
+        self._btn_ligolo.setCheckable(False)
         self._btn_ligolo.setToolTip(
-            "Clic = toggle Ligolo-ng proxy ON/OFF\nClic droit = configurer la commande"
+            "Ouvre le proxy Ligolo-ng dans un terminal interactif\nClic droit = configurer la commande"
         )
-        # On utilise clicked (pas toggled) car on veut intercepter et decider :
-        # Qt aura deja switche le checked-state, on le restaure si echec.
         self._btn_ligolo.clicked.connect(self._on_ligolo_clicked)
         self._btn_ligolo.setContextMenuPolicy(Qt.CustomContextMenu)
         self._btn_ligolo.customContextMenuRequested.connect(self._on_ligolo_context_menu)
@@ -473,13 +522,13 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
 
         # ----- UTILITAIRES (gris) : suite -----
-        act_proof = QAction("Proof (F9)", self)
+        act_proof = QAction("Proof", self)
         act_proof.setShortcut(QKeySequence("F9"))
         act_proof.setToolTip("Screenshot de la fenetre active comme proof")
         act_proof.triggered.connect(self._quick_screenshot_proof)
         add_action(act_proof, "util")
 
-        act_split = QAction("Split 2x2 (F6)", self)
+        act_split = QAction("2x2", self)
         act_split.setShortcut(QKeySequence("F6"))
         act_split.setCheckable(True)
         act_split.setToolTip("Bascule entre onglets et grille 2x2")
@@ -487,28 +536,35 @@ class MainWindow(QMainWindow):
         add_action(act_split, "util")
         self._act_split = act_split
 
-        act_palette = QAction("Palette (Ctrl+P)", self)
+        act_palette = QAction("Cmd", self)
         act_palette.setShortcut(QKeySequence("Ctrl+P"))
         act_palette.setToolTip("Palette de commandes globale")
         act_palette.triggered.connect(self._open_command_palette)
         add_action(act_palette, "util")
 
-        act_enc = QAction("Encoder", self)
+        act_enc = QAction("Enc", self)
         act_enc.setShortcut(QKeySequence("Ctrl+E"))
         act_enc.triggered.connect(self._open_encoder_dialog)
         add_action(act_enc, "util")
 
-        act_hash = QAction("Hash ID", self)
+        act_hash = QAction("Hash", self)
         act_hash.triggered.connect(self._open_hash_dialog)
         add_action(act_hash, "util")
 
-        act_transfer = QAction("Transfer", self)
+        act_searchsploit = QAction("Sploit", self)
+        act_searchsploit.setShortcut(QKeySequence("Ctrl+Shift+X"))
+        act_searchsploit.setToolTip("Verifier plusieurs services/versions avec searchsploit")
+        act_searchsploit.triggered.connect(self._open_searchsploit_dialog)
+        add_action(act_searchsploit, "util")
+
+        act_transfer = QAction("TX", self)
+        act_transfer.setToolTip("Assistant de transfert de fichiers")
         act_transfer.triggered.connect(self._open_transfer_dialog)
         add_action(act_transfer, "util")
 
         tb.addSeparator()
 
-        act_search = QAction("Recherche", self)
+        act_search = QAction("Find", self)
         act_search.setShortcut(QKeySequence("Ctrl+F"))
         act_search.triggered.connect(self._on_global_search)
         add_action(act_search, "util")
@@ -598,6 +654,8 @@ class MainWindow(QMainWindow):
                                    triggered=lambda: self._tools.check_integrity_async(force=True)))
         m_tools.addAction(QAction("AutoGrep sur le presse-papier", self,
                                    triggered=self._on_autogrep_clipboard))
+        m_tools.addAction(QAction("SearchSploit batch", self,
+                                   triggered=self._open_searchsploit_dialog))
         m_tools.addSeparator()
         m_tools.addAction(QAction("BloodHound : démarrer Docker", self,
                                    triggered=self._on_bloodhound_start))
@@ -791,9 +849,13 @@ class MainWindow(QMainWindow):
             tab.disconnect_worker_signals()
         except Exception:
             log.exception("disconnect_worker_signals failed")
-        worker.request_stop(graceful=True)
+
+        # Retire l'onglet avant de demander l'arret du process: l'UI repond
+        # instantanement meme si terminate()/PTY cleanup prend quelques ms.
         self._central.remove_terminal(tab)
+        tab.hide()
         tab.deleteLater()
+        QTimer.singleShot(0, lambda w=worker: w.request_stop(graceful=True))
 
     def _on_tab_rename(self, idx: int) -> None:
         if idx <= 0:        # onglet accueil
@@ -925,6 +987,10 @@ class MainWindow(QMainWindow):
             defaults["TARGET"] = active_machine
         # CRED:user / CRED:pass / CRED:hash
         defaults.update(self._cred_defaults_for(placeholders))
+        env_defaults = self._env.resolved_vars()
+        for key, sub in placeholders:
+            if sub is None and key not in defaults and key in env_defaults:
+                defaults[key] = env_defaults[key]
 
         if placeholders:
             # Construit les suggestions de cibles depuis le scope
@@ -940,6 +1006,11 @@ class MainWindow(QMainWindow):
                         sugg_per_placeholder[full_key] = scope_suggestions["subnets"]
                     else:
                         sugg_per_placeholder[full_key] = scope_suggestions["machines"]
+                elif key.upper() in PlaceholderDialog.WORDLIST_KEYS:
+                    sugg_per_placeholder[full_key] = self._build_wordlist_suggestions(
+                        key.upper(),
+                        tool.name,
+                    )
 
             dlg = PlaceholderDialog(
                 template, placeholders, defaults,
@@ -951,9 +1022,17 @@ class MainWindow(QMainWindow):
             )
             if dlg.exec_() != dlg.Accepted:
                 return
-            final_cmd = dlg.resolved_command()
+            final_cmd = dlg.resolved_command().strip()
         else:
             final_cmd = template
+            edit_dlg = CommandEditDialog(tool.name, final_cmd, parent=self)
+            if edit_dlg.exec_() != edit_dlg.Accepted:
+                return
+            final_cmd = edit_dlg.command()
+
+        if not final_cmd:
+            error_box(self, "Commande vide", "La commande finale est vide.")
+            return
 
         # Lancer en shell (pour accepter les pipes, &&, etc.)
         self.spawn_terminal(
@@ -964,6 +1043,67 @@ class MainWindow(QMainWindow):
         )
         self._tools.record_usage(tool.name, final_cmd)
         self._history.record(command=final_cmd, tool=tool.name, terminal=tool.name)
+
+    def _launch_tool_by_name(self, name: str, template_index: int = -1) -> None:
+        tool = self._tools.get(name)
+        if tool is None:
+            error_box(self, "Outil introuvable", f"L'outil '{name}' n'est pas configure.")
+            return
+        self._on_launch_tool(tool, template_index)
+
+    def _launch_web_fuzzer(self) -> None:
+        for name in ("gobuster", "ffuf", "feroxbuster"):
+            if self._tools.get(name) is not None:
+                self._launch_tool_by_name(name)
+                return
+        error_box(
+            self,
+            "Fuzzer web introuvable",
+            "Aucun outil gobuster, ffuf ou feroxbuster n'est configure.",
+        )
+
+    def _build_wordlist_suggestions(self, key: str, tool_name: str = "") -> List[Tuple[str, str]]:
+        """Suggestions de wordlists pour les placeholders de template."""
+        entries = self._wordlists.all()
+        scored: List[Tuple[int, str, str]] = []
+        key = key.upper()
+        tool = tool_name.lower()
+        for entry in entries:
+            label = f"{entry.name} ({entry.category})"
+            category = entry.category.lower()
+            score = self._wordlist_suggestion_score(key, tool, entry.path, category)
+            scored.append((score, label, entry.path))
+        scored.sort(key=lambda item: (item[0], item[1].lower()))
+        return [(label, path) for score, label, path in scored if score < 900]
+
+    @staticmethod
+    def _wordlist_suggestion_score(key: str, tool: str, path: str, category: str) -> int:
+        score = 500
+        if path.startswith("/opt/SecLists/"):
+            score -= 120
+        elif "seclists" in path.lower():
+            score -= 60
+        if "common.txt" in path or "quickhits" in path:
+            score -= 25
+        if "medium" in path.lower() or "raft-small" in path.lower():
+            score -= 15
+
+        wants_web = key == "WEB_WORDLIST" or tool in ("ffuf", "gobuster", "feroxbuster")
+        wants_dns = key in ("VHOST_WORDLIST", "DNS_WORDLIST")
+        wants_users = key == "USERLIST"
+        wants_passwords = key == "PASSLIST" or tool in ("john", "hashcat", "hydra")
+
+        if wants_web:
+            score += 0 if "web" in category else 300
+        elif wants_dns:
+            score += 0 if ("dns" in category or "subdomain" in category) else 300
+        elif wants_users:
+            score += 0 if "user" in category else 300
+        elif wants_passwords:
+            score += 0 if "password" in category else 300
+        elif key == "WORDLIST":
+            score += 0 if category in ("web-directories", "web-files", "passwords", "usernames", "dns") else 200
+        return score
 
     def _add_tool_to_file_server(self, tool: Tool) -> None:
         """Stage a local binary/script in the File Server transfer list."""
@@ -1077,6 +1217,14 @@ class MainWindow(QMainWindow):
             if m.hostname == active_note.name or m.ip == active_note.name:
                 return m.ip
         return ""
+
+    def _refresh_welcome_context(self) -> None:
+        if not hasattr(self, "_welcome_target_lbl"):
+            return
+        target = self._current_active_machine_ip() or "-"
+        lhost = self._network.attacker_ip() or self._env.get("LHOST") or "-"
+        self._welcome_target_lbl.setText(f"Cible: {target}")
+        self._welcome_ip_lbl.setText(f"LHOST: {lhost}")
 
     @staticmethod
     def _category_from_tool(tool: Tool) -> str:
@@ -1278,19 +1426,22 @@ class MainWindow(QMainWindow):
 
     def _on_note_switched(self, note: Optional[Note]) -> None:
         if note is None:
-            self._status.set_target_machine("Cible : -")
+            self._status.set_target_machine("-")
         else:
-            self._status.set_target_machine(f"Cible : {note.name}")
+            self._status.set_target_machine(note.name)
+        self._refresh_welcome_context()
 
     def _on_machine_selected(self, machine) -> None:
         if machine is None:
-            self._status.set_target_machine("Cible : -")
+            self._status.set_target_machine("-")
+            self._refresh_welcome_context()
             return
-        self._status.set_target_machine(f"Cible : {machine.hostname or machine.ip}")
+        self._status.set_target_machine(machine.hostname or machine.ip)
         # Si une note homonyme existe, on l'active
         existing = self._notes.get(machine.hostname or machine.ip)
         if existing:
             self._notes.set_active(existing.name)
+        self._refresh_welcome_context()
 
     def _on_import_note(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Importer une note",
@@ -1452,17 +1603,15 @@ class MainWindow(QMainWindow):
             error_box(self, "HTTP server", f"Echec : {exc}")
 
     def _quick_ligolo(self) -> None:
-        """F4 (shortcut) : declenche un click sur le bouton ligolo (toggle)."""
-        # Le bouton est checkable : on inverse l'etat puis on appelle le handler.
-        self._btn_ligolo.setChecked(not self._btn_ligolo.isChecked())
+        """F4 (shortcut) : ouvre Ligolo dans un terminal interactif."""
         self._on_ligolo_clicked()
 
     def _on_ligolo_clicked(self) -> None:
-        """Toggle Ligolo : start si OFF, stop si ON. Met le bouton en coherence
-        avec l'etat reel apres l'action.
+        """Ouvre Ligolo dans un terminal interactif.
+
+        Ligolo a souvent besoin de sudo et d'un prompt vivant; le demarrer en
+        background masque les erreurs et casse le prompt de mot de passe.
         """
-        # Etat _avant_ qu'on agisse : Qt a deja flippe le checked-state.
-        # On regarde donc l'etat reel du process pour decider.
         try:
             running = self._tool_setup.is_running("ligolo-proxy")
         except Exception as exc:
@@ -1478,14 +1627,26 @@ class MainWindow(QMainWindow):
             except Exception as exc:
                 error_box(self, "Erreur Ligolo (stop)", str(exc))
         else:
-            # Start
             try:
-                pid = self._tool_setup.start("ligolo-proxy")
+                import shlex
+                action = self._tool_setup._actions.get("ligolo-proxy")
+                if action is None:
+                    raise ValueError("Action 'ligolo-proxy' introuvable.")
+                cmd = shlex.join(self._env.expand_value(arg) for arg in action.command)
+                configured_cwd = self._env.expand_value(action.cwd) if action.cwd else ""
+                cwd = configured_cwd if configured_cwd and Path(configured_cwd).exists() else None
+                self.spawn_terminal(
+                    command=["/bin/bash", "-lc", cmd],
+                    title="Ligolo proxy",
+                    cwd=cwd,
+                    category=action.category,
+                    tool_name="ligolo-ng",
+                )
                 self.statusBar().showMessage(
-                    f"Ligolo proxy demarre (pid {pid})", 3000
+                    "Ligolo ouvert dans un terminal interactif", 3000
                 )
             except Exception as exc:
-                error_box(self, "Erreur Ligolo (start)", str(exc))
+                error_box(self, "Erreur Ligolo", str(exc))
 
         # Resync pour refleter la verite (au cas ou start/stop a echoue)
         self._sync_ligolo_button()
@@ -1519,7 +1680,7 @@ class MainWindow(QMainWindow):
         if self._tool_setup.is_running("ligolo-proxy"):
             menu.addAction("Arreter le service", lambda: self._tool_setup.stop("ligolo-proxy"))
         else:
-            menu.addAction("Demarrer le service", self._on_ligolo_clicked)
+            menu.addAction("Ouvrir dans un terminal", self._on_ligolo_clicked)
         menu.exec_(self._btn_ligolo.mapToGlobal(point))
 
     def _configure_ligolo_command(self) -> None:
@@ -1542,7 +1703,7 @@ class MainWindow(QMainWindow):
 
         v = QVBoxLayout(dlg)
         v.addWidget(QLabel(
-            "Commande lancee au clic sur le bouton Ligolo.\n"
+            "Commande ouverte au clic sur le bouton Ligolo.\n"
             "Format : argv separe par des espaces (un argument par token)."
         ))
 
@@ -1730,6 +1891,15 @@ class MainWindow(QMainWindow):
             PaletteAction("Ligolo proxy (F4)", "Action",
                            self._quick_ligolo,
                            keywords="pivot tunnel"),
+            PaletteAction("Transfer helper", "Action",
+                           self._open_transfer_dialog,
+                           keywords="upload download file server tx"),
+            PaletteAction("Nmap scan", "Action",
+                           lambda: self._launch_tool_by_name("nmap"),
+                           keywords="scan ports service enum"),
+            PaletteAction("Web fuzz", "Action",
+                           self._launch_web_fuzzer,
+                           keywords="gobuster ffuf feroxbuster dir vhost"),
             PaletteAction("Screenshot proof (F9)", "Action",
                            self._quick_screenshot_proof,
                            keywords="capture proof png"),
@@ -1740,6 +1910,16 @@ class MainWindow(QMainWindow):
                            self._open_encoder_dialog,
                            keywords="base64 url encode",
                            subtitle="Ctrl+E"),
+            PaletteAction("SearchSploit batch", "Action",
+                           self._open_searchsploit_dialog,
+                           keywords="exploitdb cve vulnerability version",
+                           subtitle="Ctrl+Shift+X"),
+            PaletteAction("Afficher cheatsheets", "Action",
+                           lambda: (self._dock_docs.show(), self._dock_docs.raise_()),
+                           keywords="docs cheatsheet aide"),
+            PaletteAction("Afficher wordlists", "Action",
+                           lambda: (self._dock_wordlists.show(), self._dock_wordlists.raise_()),
+                           keywords="seclists wordlist fuzz password"),
         ]
 
         # Outils (via ToolManager)
@@ -1748,7 +1928,7 @@ class MainWindow(QMainWindow):
                 actions.append(PaletteAction(
                     label=tool.name,
                     category="Outil",
-                    callback=lambda t=tool: self._on_launch_tool(t, 0),
+                    callback=lambda t=tool: self._on_launch_tool(t, -1),
                     keywords=" ".join(tool.tags) + " " + tool.category,
                     subtitle=tool.description[:60] if tool.description else "",
                 ))
@@ -1869,6 +2049,7 @@ class MainWindow(QMainWindow):
         ip = self._network.attacker_ip() or ""
         if ip and not self._env.get("LHOST"):
             self._env.import_from_network(ip)
+        self._refresh_welcome_context()
 
     def _open_revshell_dialog(self) -> None:
         ip = self._network.attacker_ip() or ""
@@ -1885,6 +2066,10 @@ class MainWindow(QMainWindow):
         dlg = HashDialog(parent=self)
         dlg.send_to_vault_requested.connect(self._on_hash_to_vault)
         dlg.copy_to_clipboard_requested.connect(self._clipboard.capture)
+        dlg.exec_()
+
+    def _open_searchsploit_dialog(self) -> None:
+        dlg = SearchSploitDialog(parent=self)
         dlg.exec_()
 
     def _open_transfer_dialog(self) -> None:

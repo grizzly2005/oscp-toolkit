@@ -9,8 +9,9 @@ Ameliorations vs v1.2 :
 from __future__ import annotations
 
 import re
+from collections import deque
 from pathlib import Path
-from typing import List, Optional
+from typing import Deque, List, Optional
 
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import (
@@ -18,7 +19,7 @@ from PyQt5.QtGui import (
     QTextCharFormat, QTextCursor,
 )
 from PyQt5.QtWidgets import (
-    QAction, QHBoxLayout, QLineEdit, QMenu, QPlainTextEdit,
+    QAction, QHBoxLayout, QLabel, QLineEdit, QMenu, QPlainTextEdit,
     QPushButton, QShortcut, QVBoxLayout, QWidget,
 )
 
@@ -140,15 +141,35 @@ def strip_ansi(text: str) -> str:
     return _ANSI_RE.sub('', text)
 
 
+def _compact_progress_updates(text: str) -> str:
+    """Keep only the latest carriage-return update per rendered line.
+
+    Fuzzers often repaint progress with thousands of ``\r`` updates. Keeping
+    every repaint makes the UI do a lot of invisible work, so in fast-render
+    mode we preserve the final state for each line and all newline-delimited
+    findings.
+    """
+    if '\r' not in text:
+        return text
+    out: List[str] = []
+    for part in text.split('\n'):
+        out.append(part.split('\r')[-1])
+    return '\n'.join(out)
+
+
 # -- TerminalTab -------------------------------------------------------------
 
-# Seuil de dump auto (si on depasse, on vide les premieres lignes).
-# Reduit pour eviter les freezes sur QPlainTextEdit avec beaucoup de blocs.
+# Seuil de dump auto legacy. Le widget est maintenant limite en blocks pour
+# eviter que QPlainTextEdit ne fige sur des fuzzers tres verbeux.
 _DUMP_THRESHOLD_LINES = 50_000
 _KEEP_AFTER_DUMP = 25_000
 
-# Taille max d'un seul flush. Au-dela on coupe et on continue en async.
-_FLUSH_MAX_BYTES = 256 * 1024
+_DISPLAY_MAX_BLOCKS = 12_000
+_FLUSH_INTERVAL_MS = 80
+_FLUSH_CONTINUE_MS = 12
+_FLUSH_MAX_BYTES = 64 * 1024
+_FAST_RENDER_THRESHOLD = 48 * 1024
+_FAST_BADGE_HIDE_MS = 1200
 
 
 class TerminalTab(QWidget):
@@ -172,10 +193,14 @@ class TerminalTab(QWidget):
         self._history:     List[str] = []
         self._history_idx: int = 0
 
-        self._pending: List[str] = []
+        self._pending: Deque[str] = deque()
+        self._pending_bytes: int = 0
         self._batch_timer = QTimer(self)
-        self._batch_timer.setInterval(40)
+        self._batch_timer.setInterval(_FLUSH_INTERVAL_MS)
         self._batch_timer.timeout.connect(self._flush_pending)
+        self._fast_badge_timer = QTimer(self)
+        self._fast_badge_timer.setSingleShot(True)
+        self._fast_badge_timer.timeout.connect(self._hide_fast_badge)
 
         self._ansi = _AnsiState()
         # Buffer pour les sequences ESC incompletes (split entre flushs)
@@ -207,9 +232,10 @@ class TerminalTab(QWidget):
         pal.setColor(QPalette.Text, _DEFAULT_FG)
         self._view.setPalette(pal)
 
-        # Scrollback INFINI (0 = pas de limite).
-        # On gere nous-memes le dump disque si ca depasse _DUMP_THRESHOLD_LINES.
-        self._view.setMaximumBlockCount(0)
+        # Un scrollback illimite fige vite Qt avec ffuf/gobuster/feroxbuster.
+        # Le process garde son output complet cote dumps, ici on garde surtout
+        # une vue fluide des dernieres lignes utiles.
+        self._view.setMaximumBlockCount(_DISPLAY_MAX_BLOCKS)
         self._view.setContextMenuPolicy(Qt.CustomContextMenu)
         self._view.customContextMenuRequested.connect(self._on_context_menu)
         layout.addWidget(self._view, 1)
@@ -235,6 +261,14 @@ class TerminalTab(QWidget):
         self._input.returnPressed.connect(self._on_enter)
         self._input.installEventFilter(self)
         input_row.addWidget(self._input, 1)
+
+        self._fast_badge = QLabel("FAST")
+        self._fast_badge.setObjectName("terminalFastBadge")
+        self._fast_badge.setAlignment(Qt.AlignCenter)
+        self._fast_badge.setToolTip("Rendu rapide actif: sortie compacte pour garder l'UI fluide")
+        self._fast_badge.setFixedSize(42, 22)
+        self._fast_badge.hide()
+        input_row.addWidget(self._fast_badge)
 
         self._send_btn = SafeButton("send")
         self._send_btn.setFixedSize(48, 26)
@@ -332,6 +366,7 @@ class TerminalTab(QWidget):
 
     def _on_output_raw(self, chunk: str) -> None:
         self._pending.append(chunk)
+        self._pending_bytes += len(chunk)
         if not self._batch_timer.isActive():
             self._batch_timer.start()
 
@@ -340,38 +375,46 @@ class TerminalTab(QWidget):
             self._batch_timer.stop()
             return
 
-        # Coupe les gros chunks pour ne pas figer l'UI sur npm/wget/cat-de-gros-fichiers.
-        # Si la queue depasse _FLUSH_MAX_BYTES, on flush partiel et on re-schedule.
-        accumulated = "".join(self._pending)
-        self._pending.clear()
-
-        if len(accumulated) > _FLUSH_MAX_BYTES:
-            # Cut au boundary newline le plus proche apres _FLUSH_MAX_BYTES
-            cut = accumulated.find('\n', _FLUSH_MAX_BYTES)
-            if cut < 0 or cut > _FLUSH_MAX_BYTES * 2:
-                cut = _FLUSH_MAX_BYTES
-            else:
-                cut += 1
-            self._render(accumulated[:cut])
-            # Le reste retourne dans la queue
-            self._pending.insert(0, accumulated[cut:])
-            # Re-flush rapidement (pas immediatement pour rendre la main au UI)
-            QTimer.singleShot(0, self._flush_pending)
-            return
-
-        self._batch_timer.stop()
+        accumulated = self._take_pending_slice(_FLUSH_MAX_BYTES)
         self._render(accumulated)
 
-        # Dump auto si depasse le seuil
+        if self._pending:
+            QTimer.singleShot(_FLUSH_CONTINUE_MS, self._flush_pending)
+        else:
+            self._batch_timer.stop()
+
         if self._view.blockCount() > _DUMP_THRESHOLD_LINES:
             self._dump_and_trim()
 
+    def _take_pending_slice(self, max_bytes: int) -> str:
+        chunks: List[str] = []
+        taken = 0
+        while self._pending and taken < max_bytes:
+            chunk = self._pending.popleft()
+            remaining = max_bytes - taken
+            if len(chunk) > remaining:
+                chunks.append(chunk[:remaining])
+                self._pending.appendleft(chunk[remaining:])
+                self._pending_bytes -= remaining
+                break
+            chunks.append(chunk)
+            taken += len(chunk)
+            self._pending_bytes -= len(chunk)
+        return "".join(chunks)
+
     def _render(self, raw: str) -> None:
         raw = raw.replace('\r\n', '\n')
-        segments = self._parse_ansi(raw)
+        fast_mode = len(raw) >= _FAST_RENDER_THRESHOLD or self._pending_bytes >= _FLUSH_MAX_BYTES
+        if fast_mode:
+            self._show_fast_badge()
+            segments = [(self._ansi.make_format(), _compact_progress_updates(strip_ansi(raw)))]
+        else:
+            segments = self._parse_ansi(raw)
         if not segments:
             return
 
+        scrollbar = self._view.verticalScrollBar()
+        should_autoscroll = scrollbar.value() >= scrollbar.maximum() - 2
         cursor = self._view.textCursor()
         cursor.movePosition(QTextCursor.End)
         self._view.setUpdatesEnabled(False)
@@ -383,8 +426,18 @@ class TerminalTab(QWidget):
         finally:
             self._view.setUpdatesEnabled(True)
 
-        self._view.setTextCursor(cursor)
-        self._view.ensureCursorVisible()
+        if should_autoscroll:
+            self._view.setTextCursor(cursor)
+            self._view.ensureCursorVisible()
+
+    def _show_fast_badge(self) -> None:
+        if not self._fast_badge.isVisible():
+            self._fast_badge.show()
+        self._fast_badge_timer.start(_FAST_BADGE_HIDE_MS)
+
+    def _hide_fast_badge(self) -> None:
+        if hasattr(self, "_fast_badge"):
+            self._fast_badge.hide()
 
     def _parse_ansi(self, text: str) -> List[tuple]:
         # Etape 0 : prepend le buffer de la derniere fois (sequence coupee)
@@ -660,6 +713,10 @@ class TerminalTab(QWidget):
         # Stop le batch timer pour eviter qu'il fire avec un view detruit
         try:
             self._batch_timer.stop()
+        except (RuntimeError, AttributeError):
+            pass
+        try:
+            self._fast_badge_timer.stop()
         except (RuntimeError, AttributeError):
             pass
 
