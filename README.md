@@ -27,6 +27,7 @@ So I built a unified GUI that orchestrates a full pentest session end-to-end, de
 | **Tool launcher** | Pre-configured tools with templates (`{{IP}}`, `{{LHOST}}`, `{{TARGET}}` auto-injected from scope) and a searchable command picker |
 | **Embedded terminals** | Multi-tab with auto-dump, searchable history, hung-process detection |
 | **Credential vault** | Discovered creds & hashes, reusable in tools with one click |
+| **Hash identifier** | Detects common raw, Windows, Linux, web app, Kerberos, NetNTLM and WPA hash formats, then suggests John and Hashcat commands |
 | **Reverse shell generator** | 20+ payload variants, base64/URL/PS encoding, paired listener + msfvenom |
 | **Exam workspace** | Auto-creates an `oscp-exam/` folder with scans, loot, notes, screenshots, tools, exploits and web folders |
 | **Markdown notes** | Auto-injects launched commands with timestamps, full-text search, saved into the exam workspace |
@@ -214,6 +215,12 @@ MIT. Use at your own risk on systems you have authorization to test.
 **Disclaimer**: this tool is for authorized security testing only (CTFs, labs, your own infrastructure, paid engagements). The author assumes no liability for misuse. Don't be that person.
 
 ## Simple changelog
+
+### 2026-05-14
+
+- Improved Hash Identifier detection for common raw hashes, `/etc/shadow`, pwdump/NTDS, Kerberos etypes, NetNTLM, WPA, Cisco, WordPress/phpBB, Drupal and PostgreSQL formats.
+- Hash Identifier now extracts crackable hashes from full colon-separated lines and generates shell-quoted John/Hashcat commands.
+- Added unit tests for ambiguous hashes, extracted hashes, Kerberos modes and generated commands.
 
 ### 2026-05-13
 
