@@ -32,6 +32,7 @@ from PyQt5.QtWidgets import (
 
 from core.scope_manager import Machine, ScopeManager, STATUSES
 from .dialogs import confirm, error_box
+from .widgets import frozen_updates
 
 
 _STATUS_ICONS = {
@@ -143,71 +144,73 @@ class ScopePanel(QWidget):
         if self._tree.currentItem() is not None:
             selected_mid = self._tree.currentItem().data(0, Qt.UserRole)
 
-        self._tree.clear()
-        self._update_summary()
-        # Group machines by subnet
-        subnet_items = {}
-        for s in self._scope.subnets():
-            label = s.cidr + (f" - {s.label}" if s.label else "")
-            if s.pivot_via:
-                pv = self._scope.machine(s.pivot_via)
-                via = (pv.hostname or pv.ip) if pv else s.pivot_via
-                label += f"  via {via}"
-            item = QTreeWidgetItem([label, "", ""])
-            f = item.font(0); f.setBold(True); item.setFont(0, f)
-            item.setForeground(0, QColor("#4fc3f7"))
-            item.setBackground(0, QColor("#202a30"))
-            item.setData(0, Qt.UserRole, f"subnet:{s.cidr}")
-            subnet_items[s.cidr] = item
-            self._tree.addTopLevelItem(item)
-            item.setExpanded(True)
-
-        # Orphan machines sans subnet
-        orphan_item = QTreeWidgetItem(["Sans subnet", "", ""])
-        orphan_item.setForeground(0, QColor("#777"))
-        orphan_attached = False
-
-        for m in self._scope.machines():
-            parent = None
+        with frozen_updates(self._tree):
+            self._tree.clear()
+            self._update_summary()
+            # Group machines by subnet
+            subnet_items = {}
             for s in self._scope.subnets():
-                if m.id in s.machines:
-                    parent = subnet_items.get(s.cidr)
-                    break
-            if parent is None:
-                parent = orphan_item
-                orphan_attached = True
-            status_label = _STATUS_ICONS.get(m.status, "?") + " " + m.status
-            host = m.hostname or "?"
-            line = f"{m.ip} - {host}"
-            mitem = QTreeWidgetItem([line, status_label, m.os or ""])
-            mitem.setData(0, Qt.UserRole, m.id)
-            mitem.setToolTip(0, self._machine_tooltip(m))
-            # couleur selon status
-            if m.status == "rooted":
-                mitem.setForeground(1, QColor("#81c784"))
-                mitem.setBackground(1, QColor("#1f2d22"))
-            elif m.status == "in_progress":
-                mitem.setForeground(1, QColor("#ffb74d"))
-                mitem.setBackground(1, QColor("#302719"))
-            elif m.status == "skipped":
-                mitem.setForeground(1, QColor("#777"))
-                mitem.setBackground(1, QColor("#252526"))
-            else:
-                mitem.setForeground(1, QColor("#bcaaa4"))
-            parent.addChild(mitem)
+                label = s.cidr + (f" - {s.label}" if s.label else "")
+                if s.pivot_via:
+                    pv = self._scope.machine(s.pivot_via)
+                    via = (pv.hostname or pv.ip) if pv else s.pivot_via
+                    label += f"  via {via}"
+                item = QTreeWidgetItem([label, "", ""])
+                f = item.font(0); f.setBold(True); item.setFont(0, f)
+                item.setForeground(0, QColor("#4fc3f7"))
+                item.setBackground(0, QColor("#202a30"))
+                item.setData(0, Qt.UserRole, f"subnet:{s.cidr}")
+                subnet_items[s.cidr] = item
+                self._tree.addTopLevelItem(item)
+                item.setExpanded(True)
 
-            if selected_mid == m.id:
-                self._tree.setCurrentItem(mitem)
+            # Orphan machines sans subnet
+            orphan_item = QTreeWidgetItem(["Sans subnet", "", ""])
+            orphan_item.setForeground(0, QColor("#777"))
+            orphan_attached = False
 
-        if orphan_attached:
-            self._tree.addTopLevelItem(orphan_item)
-        if not self._scope.machines() and not self._scope.subnets():
-            empty = QTreeWidgetItem(["Scope vide - ajoute une machine ou un subnet", "", ""])
-            empty.setFlags(Qt.NoItemFlags)
-            empty.setForeground(0, QColor("#777"))
-            self._tree.addTopLevelItem(empty)
-        self._tree.resizeColumnToContents(1)
-        self._tree.resizeColumnToContents(2)
+            for m in self._scope.machines():
+                parent = None
+                for s in self._scope.subnets():
+                    if m.id in s.machines:
+                        parent = subnet_items.get(s.cidr)
+                        break
+                if parent is None:
+                    parent = orphan_item
+                    orphan_attached = True
+                status_label = _STATUS_ICONS.get(m.status, "?") + " " + m.status
+                host = m.hostname or "?"
+                line = f"{m.ip} - {host}"
+                mitem = QTreeWidgetItem([line, status_label, m.os or ""])
+                mitem.setData(0, Qt.UserRole, m.id)
+                mitem.setToolTip(0, self._machine_tooltip(m))
+                # couleur selon status
+                if m.status == "rooted":
+                    mitem.setForeground(1, QColor("#81c784"))
+                    mitem.setBackground(1, QColor("#1f2d22"))
+                elif m.status == "in_progress":
+                    mitem.setForeground(1, QColor("#ffb74d"))
+                    mitem.setBackground(1, QColor("#302719"))
+                elif m.status == "skipped":
+                    mitem.setForeground(1, QColor("#777"))
+                    mitem.setBackground(1, QColor("#252526"))
+                else:
+                    mitem.setForeground(1, QColor("#bcaaa4"))
+                parent.addChild(mitem)
+
+                if selected_mid == m.id:
+                    self._tree.setCurrentItem(mitem)
+
+            if orphan_attached:
+                self._tree.addTopLevelItem(orphan_item)
+            if not self._scope.machines() and not self._scope.subnets():
+                empty = QTreeWidgetItem(["Scope vide - ajoute une machine ou un subnet", "", ""])
+                empty.setFlags(Qt.NoItemFlags)
+                empty.setForeground(0, QColor("#777"))
+                self._tree.addTopLevelItem(empty)
+            if self._tree.topLevelItemCount() < 120:
+                self._tree.resizeColumnToContents(1)
+                self._tree.resizeColumnToContents(2)
 
     def _update_summary(self) -> None:
         machines = self._scope.machines()

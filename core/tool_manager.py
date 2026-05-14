@@ -45,6 +45,28 @@ log = get_logger(__name__)
 
 _PLACEHOLDER_RE = re.compile(r"\{\{([A-Z_]+)(?::([A-Za-z0-9_]+))?\}\}")
 
+_LEGACY_NMAP_TEMPLATES = {
+    "nmap -sC -sV -oN \"$OSCP_NMAP/{{IP}}_tcp.txt\" {{IP}}",
+    "nmap -A {{IP}} -oN \"$OSCP_NMAP/{{IP}}_advanced.txt\" {{IP}}",
+    "sudo nmap -p- -sS -sU --min-rate 1000 --max-retries 1 -T4 -oN \"$OSCP_NMAP/{{IP}}_fast_tcp_udp.txt\" {{IP}}",
+    "nmap -p- -T4 -n -Pn -oN \"$OSCP_NMAP/{{IP}}_fast_ports.txt\" {{IP}}",
+    "sudo nmap --min-rate 5000 -p- -vvv -Pn -n -oG \"$OSCP_NMAP/{{IP}}_openPorts.gnmap\" {{IP}}",
+    "nmap -p- -oN \"$OSCP_NMAP/{{IP}}_all_ports.txt\" {{IP}}",
+    "nmap --top-ports {{TOP_PORTS}} -oN \"$OSCP_NMAP/{{IP}}_top_{{TOP_PORTS}}.txt\" {{IP}}",
+    "nmap -sU --top-ports 100 -oN \"$OSCP_UDP/{{IP}}_udp_top100.txt\" {{IP}}",
+    "nmap -sC -sV -p {{PORTS}} -oN \"$OSCP_SERVICES/{{IP}}_targeted.txt\" {{IP}}",
+    "nmap --script=smb-vuln* -p 445 -oN \"$OSCP_SERVICES/{{IP}}_smb_vulns.txt\" {{IP}}",
+    "nmap --script=ldap* -p 389,636 -oN \"$OSCP_SERVICES/{{IP}}_ldap.txt\" {{IP}}",
+}
+
+_LEGACY_GOBUSTER_TEMPLATES = {
+    "gobuster dir -u http://{{IP}} -w /usr/share/wordlists/dirb/common.txt",
+    "gobuster dir -u http://{{IP}} -w {{WORDLIST}} -x php,html,txt -t 50",
+    "gobuster dir -u http://{{IP}} -w {{WORDLIST}} -x php,html,txt -t 50 -k",
+    "gobuster vhost -u http://{{IP}} -w {{WORDLIST}} --append-domain",
+    "gobuster dns -d {{DOMAIN}} -w {{WORDLIST}}",
+}
+
 
 class _IntegrityWorker(QThread):
     checked = pyqtSignal(dict)
@@ -138,9 +160,24 @@ class ToolManager(QObject):
             if not t.transfer_asset and "(transfer)" in t.description.lower():
                 t.transfer_asset = True
             if t.name == "nmap":
-                t.templates = self._merge_templates(
+                t.templates = self._merge_default_templates(
                     t.templates,
                     default_item.get("templates", []),
+                    legacy_predicate=self._is_legacy_nmap_template,
+                )
+            elif t.name == "ligolo-ng":
+                t.templates = self._merge_default_templates(
+                    t.templates,
+                    default_item.get("templates", []),
+                    legacy_predicate=self._is_legacy_ligolo_template,
+                )
+                if not t.doc_link and default_item.get("doc_link"):
+                    t.doc_link = default_item["doc_link"]
+            elif t.name == "gobuster":
+                t.templates = self._merge_default_templates(
+                    t.templates,
+                    default_item.get("templates", []),
+                    legacy_predicate=self._is_legacy_gobuster_template,
                 )
             self._tools[t.name] = t
         log.info("Loaded %d tools", len(self._tools))
@@ -167,6 +204,45 @@ class ToolManager(QObject):
                 merged.append(template)
                 seen.add(template)
         return merged
+
+    @staticmethod
+    def _merge_default_templates(
+        current: List[str],
+        defaults: List[str],
+        legacy_predicate=None,
+    ) -> List[str]:
+        if not defaults:
+            return list(current)
+        merged = list(defaults)
+        seen = set(merged)
+        for template in current:
+            if legacy_predicate is not None and legacy_predicate(template):
+                continue
+            if template not in seen:
+                merged.append(template)
+                seen.add(template)
+        return merged
+
+    @staticmethod
+    def _is_legacy_nmap_template(template: str) -> bool:
+        return template in _LEGACY_NMAP_TEMPLATES
+
+    @staticmethod
+    def _is_legacy_ligolo_template(template: str) -> bool:
+        normalized = template.replace("\\", "/")
+        if normalized == "$BIN_LIN/network/ligolo/ligolo_proxy_lin -selfcert":
+            return True
+        if normalized.endswith("/network/ligolo/ligolo_proxy_lin -selfcert"):
+            return True
+        if "ligolo_agent_win.exe" in normalized and "/Temp/ag.exe" in normalized:
+            return True
+        if "ligolo_agent_lin" in normalized and "/tmp/ag" in normalized:
+            return True
+        return False
+
+    @staticmethod
+    def _is_legacy_gobuster_template(template: str) -> bool:
+        return template in _LEGACY_GOBUSTER_TEMPLATES
 
     def _save(self) -> None:
         self._cm.save(

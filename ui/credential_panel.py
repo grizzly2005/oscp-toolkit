@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
 )
 
 from core.credential_vault import CredentialVault, Credential
+from .widgets import frozen_updates
 
 
 class _CredEditDialog(QDialog):
@@ -132,41 +133,43 @@ class CredentialPanel(QWidget):
     # ----------------------------------------------------------
 
     def _refresh(self) -> None:
-        self._table.setRowCount(0)
         query = self._search.text().strip().lower()
         creds: List[Credential] = self._vault.all()
         if query:
             creds = [c for c in creds if self._match(c, query)]
 
-        for c in creds:
-            row = self._table.rowCount()
-            self._table.insertRow(row)
+        with frozen_updates(self._table):
+            self._table.setRowCount(0)
+            for c in creds:
+                row = self._table.rowCount()
+                self._table.insertRow(row)
 
-            user = c.username + (f"@{c.domain}" if c.domain else "")
-            self._table.setItem(row, 0, QTableWidgetItem(user or "-"))
+                user = c.username + (f"@{c.domain}" if c.domain else "")
+                self._table.setItem(row, 0, QTableWidgetItem(user or "-"))
 
-            secret = c.password if c.password else self._short_hash(c.hash)
-            secret_item = QTableWidgetItem(secret or "-")
-            if c.hash and not c.password:
-                secret_item.setForeground(QColor("#ffb74d"))   # hash en orange
-            self._table.setItem(row, 1, secret_item)
+                secret = c.password if c.password else self._short_hash(c.hash)
+                secret_item = QTableWidgetItem(secret or "-")
+                if c.hash and not c.password:
+                    secret_item.setForeground(QColor("#ffb74d"))   # hash en orange
+                self._table.setItem(row, 1, secret_item)
 
-            t = c.hash_type if c.hash else c.type
-            self._table.setItem(row, 2, QTableWidgetItem(t))
+                t = c.hash_type if c.hash else c.type
+                self._table.setItem(row, 2, QTableWidgetItem(t))
 
-            self._table.setItem(row, 3, QTableWidgetItem(c.source or "-"))
-            self._table.setItem(row, 4, QTableWidgetItem(c.target or "*"))
+                self._table.setItem(row, 3, QTableWidgetItem(c.source or "-"))
+                self._table.setItem(row, 4, QTableWidgetItem(c.target or "*"))
 
-            # Col copier
-            copy_item = QTableWidgetItem("")
-            copy_item.setTextAlignment(Qt.AlignCenter)
-            copy_item.setToolTip("Double-clic = copier user:secret")
-            self._table.setItem(row, 5, copy_item)
+                # Col copier
+                copy_item = QTableWidgetItem("")
+                copy_item.setTextAlignment(Qt.AlignCenter)
+                copy_item.setToolTip("Double-clic = copier user:secret")
+                self._table.setItem(row, 5, copy_item)
 
-            # On stocke l'ID sur le premier item
-            self._table.item(row, 0).setData(Qt.UserRole, c.id)
+                # On stocke l'ID sur le premier item
+                self._table.item(row, 0).setData(Qt.UserRole, c.id)
 
-        self._table.resizeColumnsToContents()
+            if self._table.rowCount() < 250:
+                self._table.resizeColumnsToContents()
 
     @staticmethod
     def _match(c: Credential, q: str) -> bool:

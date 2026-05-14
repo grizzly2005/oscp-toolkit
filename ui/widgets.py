@@ -1,8 +1,10 @@
 """Widgets réutilisables — SafeButton et autres."""
 from __future__ import annotations
+from contextlib import contextmanager
+from typing import Iterator, Optional
+
 from PyQt5.QtCore import Qt, QPoint
 from PyQt5.QtWidgets import QPushButton, QWidget
-from typing import Optional
 
 
 class SafeButton(QPushButton):
@@ -23,3 +25,17 @@ class SafeButton(QPushButton):
                 self.update()
         else:
             super().mouseReleaseEvent(event)
+
+
+@contextmanager
+def frozen_updates(widget: QWidget) -> Iterator[None]:
+    """Temporarily suspend repaints while rebuilding a heavy widget."""
+    previous = widget.updatesEnabled()
+    if previous:
+        widget.setUpdatesEnabled(False)
+    try:
+        yield
+    finally:
+        if previous:
+            widget.setUpdatesEnabled(True)
+            widget.update()

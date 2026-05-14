@@ -175,37 +175,49 @@ class TargetBoard(QWidget):
         self._pulse_timer = QTimer(self)
         self._pulse_timer.setInterval(800)
         self._pulse_timer.timeout.connect(self._pulse_active_header)
-        self._pulse_timer.start()
         self._refresh()
 
     # ----------------------------------------------------------
 
     def _refresh(self) -> None:
         self._counts = {s: 0 for s in STATUSES}
-        for col in self._columns.values():
-            col.clear()
-        for m in self._scope.machines():
-            col = self._columns.get(m.status)
-            if col is None:
-                col = self._columns.get("todo")
-            self._counts[m.status if m.status in self._counts else "todo"] += 1
-            item = QListWidgetItem()
-            item.setData(Qt.UserRole, m.id)
-            item.setSizeHint(QSize(170, 62))
-            item.setToolTip(
-                f"IP: {m.ip}\nOS: {m.os}\nDifficulty: {m.difficulty}\n"
-                f"Points: {m.points}"
-            )
-            col.addItem(item)
-            col.setItemWidget(item, _MachineCard(m, m.status, col))
-        for status, col in self._columns.items():
-            if col.count() == 0:
-                item = QListWidgetItem("Aucune cible")
-                item.setFlags(Qt.NoItemFlags)
-                item.setForeground(QColor("#666"))
-                item.setTextAlignment(Qt.AlignCenter)
+        cols = list(self._columns.values())
+        for col in cols:
+            col.setUpdatesEnabled(False)
+        try:
+            for col in cols:
+                col.clear()
+            for m in self._scope.machines():
+                col = self._columns.get(m.status)
+                if col is None:
+                    col = self._columns.get("todo")
+                self._counts[m.status if m.status in self._counts else "todo"] += 1
+                item = QListWidgetItem()
+                item.setData(Qt.UserRole, m.id)
+                item.setSizeHint(QSize(170, 62))
+                item.setToolTip(
+                    f"IP: {m.ip}\nOS: {m.os}\nDifficulty: {m.difficulty}\n"
+                    f"Points: {m.points}"
+                )
                 col.addItem(item)
+                col.setItemWidget(item, _MachineCard(m, m.status, col))
+            for status, col in self._columns.items():
+                if col.count() == 0:
+                    item = QListWidgetItem("Aucune cible")
+                    item.setFlags(Qt.NoItemFlags)
+                    item.setForeground(QColor("#666"))
+                    item.setTextAlignment(Qt.AlignCenter)
+                    col.addItem(item)
+        finally:
+            for col in cols:
+                col.setUpdatesEnabled(True)
+                col.update()
         self._refresh_headers()
+        if self._counts.get("in_progress", 0) > 0:
+            if not self._pulse_timer.isActive():
+                self._pulse_timer.start()
+        else:
+            self._pulse_timer.stop()
 
     @staticmethod
     def _format_machine(m: Machine) -> str:

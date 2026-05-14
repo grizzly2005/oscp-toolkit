@@ -21,9 +21,13 @@ la passe à son outil (hashcat, hydra, crackmapexec, ...).
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, List, Optional, Set
 
@@ -33,6 +37,94 @@ from .config_manager import ConfigManager
 from .logger import get_logger
 
 log = get_logger(__name__)
+
+_SECLISTS_ROOT = "/opt/SecLists"
+_COMMON_SECLISTS_WORDLISTS = [
+    (
+        "SecLists web common",
+        "Discovery/Web-Content/common.txt",
+        "web-directories",
+        "Web content rapide et fiable",
+    ),
+    (
+        "SecLists web quickhits",
+        "Discovery/Web-Content/quickhits.txt",
+        "web-directories",
+        "Web content tres rapide",
+    ),
+    (
+        "SecLists raft small dirs",
+        "Discovery/Web-Content/raft-small-directories.txt",
+        "web-directories",
+        "Repertoires web small",
+    ),
+    (
+        "SecLists raft medium dirs",
+        "Discovery/Web-Content/raft-medium-directories.txt",
+        "web-directories",
+        "Repertoires web medium",
+    ),
+    (
+        "SecLists DirBuster medium",
+        "Discovery/Web-Content/DirBuster-2007_directory-list-2.3-medium.txt",
+        "web-directories",
+        "DirBuster 2.3 medium",
+    ),
+    (
+        "SecLists raft medium files",
+        "Discovery/Web-Content/raft-medium-files.txt",
+        "web-files",
+        "Fichiers web medium",
+    ),
+    (
+        "SecLists DNS top 5000",
+        "Discovery/DNS/subdomains-top1million-5000.txt",
+        "dns",
+        "DNS/vhost shortlist",
+    ),
+    (
+        "SecLists DNS top 20000",
+        "Discovery/DNS/subdomains-top1million-20000.txt",
+        "dns",
+        "DNS/vhost medium",
+    ),
+    (
+        "SecLists usernames shortlist",
+        "Usernames/top-usernames-shortlist.txt",
+        "usernames",
+        "Usernames tres communs",
+    ),
+    (
+        "SecLists names",
+        "Usernames/Names/names.txt",
+        "usernames",
+        "Prenoms et noms courants",
+    ),
+    (
+        "SecLists passwords top 1000",
+        "Passwords/Common-Credentials/xato-net-10-million-passwords-1000.txt",
+        "passwords",
+        "Mots de passe top 1000",
+    ),
+    (
+        "SecLists passwords top 10000",
+        "Passwords/Common-Credentials/xato-net-10-million-passwords-10000.txt",
+        "passwords",
+        "Mots de passe top 10000",
+    ),
+    (
+        "SecLists probable top 12000",
+        "Passwords/Common-Credentials/probable-v2_top-12000.txt",
+        "passwords",
+        "Mots de passe probables",
+    ),
+    (
+        "SecLists rockyou archive",
+        "Passwords/Leaked-Databases/rockyou.txt.tar.gz",
+        "passwords",
+        "Rockyou compresse dans SecLists",
+    ),
+]
 
 
 @dataclass
@@ -72,15 +164,51 @@ class WordlistManager(QObject):
                 e = WordlistEntry(**it)
             except TypeError:
                 continue
-            self._entries.append(e)
+            self._append_entry(e)
+        for e in self._load_default_entries():
+            self._append_entry(e)
+        for e in self._common_seclists_entries():
+            self._append_entry(e)
         # Custom générées : on les ajoute au catalogue
         for p in sorted(self.custom_dir.glob("*.txt")):
-            if not any(pp.path == str(p) for pp in self._entries):
-                self._entries.append(WordlistEntry(
+            self._append_entry(WordlistEntry(
                     name=p.stem, path=str(p), category="custom",
                     description="Wordlist générée localement",
                 ))
         self.refresh_metadata()
+
+    def _load_default_entries(self) -> List[WordlistEntry]:
+        path = self._cm.defaults_dir / "wordlists.default.json"
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return []
+        entries: List[WordlistEntry] = []
+        for it in data.get("wordlists", []):
+            try:
+                entries.append(WordlistEntry(**it))
+            except TypeError:
+                continue
+        return entries
+
+    def _common_seclists_entries(self) -> List[WordlistEntry]:
+        entries: List[WordlistEntry] = []
+        for name, relative_path, category, description in _COMMON_SECLISTS_WORDLISTS:
+            entries.append(WordlistEntry(
+                name=name,
+                path=f"{_SECLISTS_ROOT}/{relative_path}",
+                category=category,
+                description=description,
+            ))
+        return entries
+
+    def _append_entry(self, entry: WordlistEntry) -> None:
+        normalized = str(Path(entry.path))
+        for existing in self._entries:
+            if str(Path(existing.path)) == normalized:
+                return
+        self._entries.append(entry)
 
     def _save(self) -> None:
         self._cm.save("wordlists", {
@@ -112,21 +240,26 @@ class WordlistManager(QObject):
     def refresh_metadata(self) -> None:
         for e in self._entries:
             p = Path(e.path)
-            if p.exists():
+            local_exists = p.exists()
+            if local_exists or _wsl_file_exists(e.path):
                 e.present = True
-                try:
-                    e.size_bytes = p.stat().st_size
-                except OSError:
-                    e.size_bytes = 0
-                # Estimation rapide du nb de lignes pour les petits fichiers
-                if e.size_bytes < 5 * 1024 * 1024:        # <5 MB
+                if local_exists:
                     try:
-                        with open(p, "rb") as f:
-                            e.lines = sum(1 for _ in f)
+                        e.size_bytes = p.stat().st_size
                     except OSError:
-                        e.lines = 0
+                        e.size_bytes = 0
+                    # Estimation rapide du nb de lignes pour les petits fichiers
+                    if e.size_bytes < 5 * 1024 * 1024:        # <5 MB
+                        try:
+                            with open(p, "rb") as f:
+                                e.lines = sum(1 for _ in f)
+                        except OSError:
+                            e.lines = 0
+                    else:
+                        e.lines = 0        # on évite de scanner rockyou
                 else:
-                    e.lines = 0        # on évite de scanner rockyou
+                    e.size_bytes = 0
+                    e.lines = 0
             else:
                 e.present = False
 
@@ -246,3 +379,22 @@ _LEET_MAP = str.maketrans({
 
 def _leet(word: str) -> str:
     return word.translate(_LEET_MAP)
+
+
+@lru_cache(maxsize=512)
+def _wsl_file_exists(path: str) -> bool:
+    if os.name != "nt" or not path.startswith("/"):
+        return False
+    if shutil.which("wsl") is None:
+        return False
+    try:
+        proc = subprocess.run(
+            ["wsl", "-e", "test", "-f", path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0

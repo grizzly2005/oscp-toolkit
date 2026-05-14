@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QIcon
 from PyQt5.QtWidgets import (
     QAction, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
@@ -28,6 +28,7 @@ from PyQt5.QtWidgets import (
 from core.tool_manager import Tool, ToolManager
 from core.logger import get_logger
 from .dialogs import confirm, error_box
+from .widgets import frozen_updates
 
 log = get_logger(__name__)
 
@@ -116,7 +117,11 @@ class ToolPanel(QWidget):
         search_row = QHBoxLayout()
         self._search = QLineEdit()
         self._search.setPlaceholderText(" Rechercher...")
-        self._search.textChanged.connect(self._rebuild)
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(120)
+        self._search_timer.timeout.connect(self._rebuild)
+        self._search.textChanged.connect(lambda _text: self._search_timer.start())
         search_row.addWidget(self._search)
 
         btn_new = QPushButton("+")
@@ -147,41 +152,42 @@ class ToolPanel(QWidget):
     # ----------------------------------------------------------
 
     def _rebuild(self) -> None:
-        self._tree.clear()
         query = self._search.text().strip().lower()
-        favorites = [t for t in self._tm.all() if t.favorite]
-        if favorites:
-            fav_root = QTreeWidgetItem(["* Favoris"])
-            fav_root.setForeground(0, QColor("#ffa000"))
-            for t in favorites:
-                if query and query not in t.name.lower():
-                    continue
-                fav_root.addChild(self._make_item(t))
-            self._tree.addTopLevelItem(fav_root)
-            fav_root.setExpanded(True)
-
-        by_cat = self._tm.by_category()
-        # Ordre maîtrisé, puis catégories inconnues en fin
-        ordered = [c for c in CATEGORY_ORDER if c in by_cat] + [
-            c for c in sorted(by_cat.keys()) if c not in CATEGORY_ORDER
-        ]
-        for cat in ordered:
-            cat_item = QTreeWidgetItem([cat])
-            f = cat_item.font(0)
-            f.setBold(True)
-            cat_item.setFont(0, f)
-            added = 0
-            for t in by_cat[cat]:
-                if query:
-                    haystack = (t.name + " " + t.description + " " + " ".join(t.tags)).lower()
-                    if query not in haystack:
+        with frozen_updates(self._tree):
+            self._tree.clear()
+            favorites = [t for t in self._tm.all() if t.favorite]
+            if favorites:
+                fav_root = QTreeWidgetItem(["* Favoris"])
+                fav_root.setForeground(0, QColor("#ffa000"))
+                for t in favorites:
+                    if query and query not in t.name.lower():
                         continue
-                cat_item.addChild(self._make_item(t))
-                added += 1
-            if added == 0 and query:
-                continue
-            self._tree.addTopLevelItem(cat_item)
-            cat_item.setExpanded(True)
+                    fav_root.addChild(self._make_item(t))
+                self._tree.addTopLevelItem(fav_root)
+                fav_root.setExpanded(True)
+
+            by_cat = self._tm.by_category()
+            # Ordre maîtrisé, puis catégories inconnues en fin
+            ordered = [c for c in CATEGORY_ORDER if c in by_cat] + [
+                c for c in sorted(by_cat.keys()) if c not in CATEGORY_ORDER
+            ]
+            for cat in ordered:
+                cat_item = QTreeWidgetItem([cat])
+                f = cat_item.font(0)
+                f.setBold(True)
+                cat_item.setFont(0, f)
+                added = 0
+                for t in by_cat[cat]:
+                    if query:
+                        haystack = (t.name + " " + t.description + " " + " ".join(t.tags)).lower()
+                        if query not in haystack:
+                            continue
+                    cat_item.addChild(self._make_item(t))
+                    added += 1
+                if added == 0 and query:
+                    continue
+                self._tree.addTopLevelItem(cat_item)
+                cat_item.setExpanded(True)
 
     def _make_item(self, tool: Tool) -> QTreeWidgetItem:
         label = tool.name

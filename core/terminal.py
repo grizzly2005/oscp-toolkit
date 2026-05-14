@@ -53,6 +53,8 @@ _MAX_BUFFER_LINES = 50_000
 _WATCHDOG_TIMEOUT_SEC = 10.0
 _DUMP_DIR = PATHS.terminal_dumps_dir
 _SIGTERM_GRACE_SEC = 3.0
+_EMIT_MAX_CHARS = 64 * 1024
+_EMIT_INTERVAL_SEC = 0.05
 
 
 def _default_shell_command() -> List[str]:
@@ -107,6 +109,9 @@ class TerminalWorker(QThread):
         self._last_output_ts = time.time()
         self._last_input_ts:  float = 0.0   # timestamp dernier input envoyé
         self._was_unresponsive = False
+        self._emit_buffer: List[str] = []
+        self._emit_buffer_chars: int = 0
+        self._last_emit_ts = time.time()
 
     # ----------------------------------------------------------
 
@@ -176,6 +181,7 @@ class TerminalWorker(QThread):
             log.exception("Terminal spawn/loop failed")
             self.error_occurred.emit(f"Terminal failed: {exc}")
         finally:
+            self._flush_output_buffer(force=True)
             self._teardown()
             self.finished_signal.emit(exit_code)
 
@@ -298,6 +304,7 @@ class TerminalWorker(QThread):
                 if self._was_unresponsive:
                     self._was_unresponsive = False
                     self.alive_again.emit()
+            self._flush_output_buffer()
 
             # Watchdog : ne fire que si une commande a été envoyée
             # et qu'il n'y a pas eu de réponse depuis _WATCHDOG_TIMEOUT_SEC.
@@ -320,6 +327,7 @@ class TerminalWorker(QThread):
             except ChildProcessError:
                 break
             if done_pid == self._pid:
+                self._flush_output_buffer(force=True)
                 return os.waitstatus_to_exitcode(status) if hasattr(os, "waitstatus_to_exitcode") else (
                     os.WEXITSTATUS(status) if os.WIFEXITED(status) else -1
                 )
@@ -370,6 +378,7 @@ class TerminalWorker(QThread):
                 if self._was_unresponsive:
                     self._was_unresponsive = False
                     self.alive_again.emit()
+            self._flush_output_buffer()
 
             now = time.time()
             waiting_for_output = (
@@ -390,6 +399,7 @@ class TerminalWorker(QThread):
                     except queue.Empty:
                         break
                     self._handle_output(chunk)
+                self._flush_output_buffer(force=True)
                 return int(rc)
 
             time.sleep(0.05)
@@ -453,12 +463,33 @@ class TerminalWorker(QThread):
     def _handle_output(self, chunk: bytes) -> None:
         self._last_output_ts = time.time()
         text = _sanitize(chunk)
-        self.output_received.emit(text)
+        self._queue_output(text)
         # Comptage de lignes pour dumping
         new_lines = text.count("\n")
         self._buffer_lines += new_lines
         if self._buffer_lines >= _MAX_BUFFER_LINES:
             self._dump(text)
+
+    def _queue_output(self, text: str) -> None:
+        self._emit_buffer.append(text)
+        self._emit_buffer_chars += len(text)
+        self._flush_output_buffer()
+
+    def _flush_output_buffer(self, force: bool = False) -> None:
+        if not self._emit_buffer:
+            return
+        now = time.time()
+        if (
+            not force
+            and self._emit_buffer_chars < _EMIT_MAX_CHARS
+            and (now - self._last_emit_ts) < _EMIT_INTERVAL_SEC
+        ):
+            return
+        text = "".join(self._emit_buffer)
+        self._emit_buffer.clear()
+        self._emit_buffer_chars = 0
+        self._last_emit_ts = now
+        self.output_received.emit(text)
 
     def _dump(self, text: str) -> None:
         """Au dépassement de buffer, on commence à dump dans un fichier."""

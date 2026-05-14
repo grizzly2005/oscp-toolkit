@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
 )
 
 from core.wordlist_manager import WordlistManager, WordlistEntry
+from .widgets import frozen_updates
 
 
 class _GenerateDialog(QDialog):
@@ -118,37 +119,39 @@ class WordlistPanel(QWidget):
 
     def _refresh(self) -> None:
         q = self._search.text().strip().lower()
-        self._table.setRowCount(0)
-        for e in self._mgr.all():
-            if q:
-                hay = f"{e.name} {e.path} {e.category} {e.description}".lower()
-                if q not in hay:
-                    continue
-            row = self._table.rowCount()
-            self._table.insertRow(row)
+        with frozen_updates(self._table):
+            self._table.setRowCount(0)
+            for e in self._mgr.all():
+                if q:
+                    hay = f"{e.name} {e.path} {e.category} {e.description}".lower()
+                    if q not in hay:
+                        continue
+                row = self._table.rowCount()
+                self._table.insertRow(row)
 
-            presence = "[OK]" if e.present else "[KO]"
-            pres_item = QTableWidgetItem(presence)
-            pres_item.setTextAlignment(Qt.AlignCenter)
-            self._table.setItem(row, 0, pres_item)
+                presence = "[OK]" if e.present else "[KO]"
+                pres_item = QTableWidgetItem(presence)
+                pres_item.setTextAlignment(Qt.AlignCenter)
+                self._table.setItem(row, 0, pres_item)
 
-            self._table.setItem(row, 1, QTableWidgetItem(e.name))
-            self._table.setItem(row, 2, QTableWidgetItem(e.category))
+                self._table.setItem(row, 1, QTableWidgetItem(e.name))
+                self._table.setItem(row, 2, QTableWidgetItem(e.category))
 
-            lines = f"{e.lines:,}" if e.lines else "-"
-            self._table.setItem(row, 3, QTableWidgetItem(lines))
+                lines = f"{e.lines:,}" if e.lines else "-"
+                self._table.setItem(row, 3, QTableWidgetItem(lines))
 
-            p_item = QTableWidgetItem(e.path)
-            if not e.present:
-                p_item.setForeground(QColor("#ef5350"))
-            self._table.setItem(row, 4, p_item)
+                p_item = QTableWidgetItem(e.path)
+                if not e.present:
+                    p_item.setForeground(QColor("#ef5350"))
+                self._table.setItem(row, 4, p_item)
 
-            self._table.item(row, 1).setData(Qt.UserRole, e.path)
+                self._table.item(row, 1).setData(Qt.UserRole, e.path)
 
-        self._table.resizeColumnToContents(0)
-        self._table.resizeColumnToContents(1)
-        self._table.resizeColumnToContents(2)
-        self._table.resizeColumnToContents(3)
+            if self._table.rowCount() < 250:
+                self._table.resizeColumnToContents(0)
+                self._table.resizeColumnToContents(1)
+                self._table.resizeColumnToContents(2)
+                self._table.resizeColumnToContents(3)
 
     def _selected_entry(self) -> Optional[WordlistEntry]:
         row = self._table.currentRow()

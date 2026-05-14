@@ -48,12 +48,17 @@ class StatusBar(QWidget):
 
         self.setFixedHeight(26)
         self.setStyleSheet("""
-            StatusBar { background: #263238; color: #eceff1; }
-            QLabel { color: #eceff1; padding: 0 8px; }
-            QLabel[kind="ip"] { background: #37474f; color: #80deea; border-radius: 3px; }
-            QLabel[kind="vpn-on"] { color: #b9f6ca; }
-            QLabel[kind="vpn-off"] { color: #ff8a80; }
-            QLabel[kind="ws"] { color: #fff59d; }
+            StatusBar { background: #0d1117; color: #e6edf3; }
+            QLabel { color: #e6edf3; padding: 0 8px; }
+            QLabel[kind="ip"] {
+                background: #17324d;
+                color: #a5d6ff;
+                border: 1px solid #2f81f7;
+                border-radius: 3px;
+            }
+            QLabel[kind="vpn-on"] { color: #7ee787; }
+            QLabel[kind="vpn-off"] { color: #ff7b72; }
+            QLabel[kind="ws"] { color: #f2cc60; }
         """)
 
         layout = QHBoxLayout(self)

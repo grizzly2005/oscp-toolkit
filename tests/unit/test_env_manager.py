@@ -26,6 +26,43 @@ def test_default_keys_present(env_manager):
         assert k in vars_
 
 
+def test_ligolo_defaults_present(env_manager):
+    assert env_manager.get("LIGOLO_IFACE") == "ligolol2"
+    assert env_manager.get("LIGOLO_PORT") == "11601"
+
+
+def test_wordlist_defaults_present(env_manager):
+    assert env_manager.get("WEB_WORDLIST") == "/opt/SecLists/Discovery/Web-Content/common.txt"
+    assert env_manager.get("VHOST_WORDLIST") == (
+        "/opt/SecLists/Discovery/DNS/subdomains-top1million-5000.txt"
+    )
+
+
+def test_legacy_wordlist_defaults_migrate_to_opt_seclists(tmp_config_dir, config_manager, qapp):
+    (tmp_config_dir / "defaults" / "env_vars.default.json").write_text(
+        '{"vars": {}}', encoding="utf-8"
+    )
+    (tmp_config_dir / "env_vars.json").write_text(
+        """
+        {
+          "vars": {
+            "WEB_WORDLIST": "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt",
+            "VHOST_WORDLIST": "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt"
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+    from core.env_manager import EnvManager
+
+    manager = EnvManager(config_manager)
+
+    assert manager.get("WEB_WORDLIST") == "/opt/SecLists/Discovery/Web-Content/common.txt"
+    assert manager.get("VHOST_WORDLIST") == (
+        "/opt/SecLists/Discovery/DNS/subdomains-top1million-5000.txt"
+    )
+
+
 def test_set_and_get(env_manager):
     env_manager.set("LHOST", "10.10.14.1")
     assert env_manager.get("LHOST") == "10.10.14.1"
