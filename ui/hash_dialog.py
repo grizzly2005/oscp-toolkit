@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from core.hash_identifier import identify, HashCandidate
+from core.hash_identifier import identify, HashCandidate, save_hash_command
 
 
 _CONFIDENCE_COLOR = {
@@ -136,12 +136,13 @@ class HashDialog(QDialog):
         c: HashCandidate = current.data(0, Qt.UserRole)
         self._selected_candidate = c
 
-        hash_value = self._input.text().strip()
+        raw_value = self._input.text().strip()
+        hash_value = c.matched_value or raw_value
         wl = self._wordlist.text().strip() or "/usr/share/wordlists/rockyou.txt"
 
         lines = [
             "# Save hash to a file first:",
-            f"echo '{hash_value}' > hash.txt",
+            save_hash_command(hash_value),
             "",
             "# hashcat:",
             c.hashcat_command("hash.txt", wl),
@@ -149,6 +150,11 @@ class HashDialog(QDialog):
             "# john:",
             c.john_command("hash.txt", wl),
         ]
+        if c.matched_value or c.notes:
+            lines.extend(["", "# Notes:"])
+            if c.matched_value:
+                lines.append(f"# Hash extrait depuis: {c.source}")
+            lines.extend(f"# - {note}" for note in c.notes)
         self._cmd_view.setPlainText("\n".join(lines))
 
     def _copy_line(self, which: int) -> None:
